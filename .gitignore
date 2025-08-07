@@ -12,7 +12,7 @@ dist
 dist-ssr
 *.local
 
-
+# this is from base project
 backend/.claude
 backend/teesheet.html
 # Editor directories and files
