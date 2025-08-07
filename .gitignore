@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+backend/.claude
+backend/teesheet.html
+
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
