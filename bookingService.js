@@ -1,8 +1,9 @@
-// backend/bookingService.js - Complete Final Version
-const axios = require('axios');
-const cheerio = require('cheerio');
-const tough = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+// bookingService.js - ES Module Version
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import tough from 'tough-cookie';
+import { wrapper } from 'axios-cookiejar-support';
+import fs from 'fs';
 
 class GolfBookingService {
     constructor() {
@@ -206,7 +207,6 @@ class GolfBookingService {
             console.log('Response received, length:', response.data.length);
 
             // Debug: Save response
-            const fs = require('fs');
             fs.writeFileSync('teesheet.html', response.data);
             console.log('Saved response to teesheet.html');
 
@@ -428,7 +428,7 @@ class GolfBookingService {
 
             console.log('Got booking form, extracting form data...');
             const $ = cheerio.load(bookingFormResponse.data);
-            
+
             // Extract required form fields
             const viewState = $('input[name="__VIEWSTATE"]').val() || '';
             const eventValidation = $('input[name="__EVENTVALIDATION"]').val() || '';
@@ -436,7 +436,7 @@ class GolfBookingService {
 
             // Build form data for booking
             const formData = new URLSearchParams();
-            
+
             // Core form fields - matching the exact structure from your sample
             formData.append('defaultSM', 'defaultSM|ctl00$ctrl_MakeTeeTime$lbBook');
             formData.append('rsmDefaultCSS_TSSM', 'Telerik.Web.UI, Version=2025.1.416.462, Culture=neutral, PublicKeyToken=121fae78165ba3d4:en-US:ced1f735-5c2a-4218-bd68-1813924fe936:1c2121e:e24b8e95:8cee9284:a3b7d93f:aac1aeb7:c73cf106;Telerik.Web.UI.Skins, Version=2025.1.416.462, Culture=neutral, PublicKeyToken=121fae78165ba3d4:en-US:ed16527b-31a8-4623-a686-9663f4c1871e:cb23ecce');
@@ -445,24 +445,24 @@ class GolfBookingService {
             formData.append('__CEVIEWSTATE', ceViewState);
             formData.append('__VIEWSTATE', viewState);
             if (eventValidation) formData.append('__EVENTVALIDATION', eventValidation);
-            
+
             // Booking details with proper client states
             formData.append('ctl00$ctrl_MakeTeeTime$drpStartHole$tCombo', '1st Tee');
             formData.append('ctl00_ctrl_MakeTeeTime_drpStartHole_tCombo_ClientState', '{"logEntries":null,"value":"1","text":"1st Tee","enabled":false,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$drpStartHole$mobileComboSelected', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$drpRoundLength$tCombo', 'Eighteen Holes');
             formData.append('ctl00_ctrl_MakeTeeTime_drpRoundLength_tCombo_ClientState', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$drpPartySize$tCombo', 'Foursome');
             formData.append('ctl00_ctrl_MakeTeeTime_drpPartySize_tCombo_ClientState', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$rdDate$tMDateBox', slot.date);
             formData.append('ctl00$ctrl_MakeTeeTime$rdDate$mobileDateBoxSelected', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$drpCourseName$tCombo', 'Trump National Colts Neck');
             formData.append('ctl00_ctrl_MakeTeeTime_drpCourseName_tCombo_ClientState', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$drpTime$tCombo', slot.time);
             formData.append('ctl00_ctrl_MakeTeeTime_drpTime_tCombo_ClientState', '');
             formData.append('ctl00$ctrl_MakeTeeTime$drpTime$mobileComboSelected', '');
@@ -471,10 +471,10 @@ class GolfBookingService {
             // Player 1 (Member - Jake Habib)
             formData.append('ctl00$ctrl_MakeTeeTime$P1$chkNotify', 'on');
             formData.append('ctl00$ctrl_MakeTeeTime$P1$PCombo$PlayerName', 'Habib, Jake');
-            formData.append('ctl00_ctrl_MakeTeeTime_P1_PCombo_PlayerName_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P1_PCombo_PlayerName_ClientState',
                 '{"logEntries":[],"value":"100003855_Member","text":"Habib, Jake","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P1$transport$oCombo', 'Riding without Caddie');
-            formData.append('ctl00_ctrl_MakeTeeTime_P1_transport_oCombo_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P1_transport_oCombo_ClientState',
                 '{"logEntries":[],"value":"209","text":"Riding without Caddie","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P1$transport$mobileComboSelected', '');
             formData.append('ctl00$ctrl_MakeTeeTime$P1$groupNum', '0');
@@ -482,10 +482,10 @@ class GolfBookingService {
             // Player 2 (Guest - Diana Bajramovic)
             formData.append('ctl00$ctrl_MakeTeeTime$P2$chkNotify', 'on');
             formData.append('ctl00$ctrl_MakeTeeTime$P2$PCombo$PlayerName', 'Bajramovic,  Diana');
-            formData.append('ctl00_ctrl_MakeTeeTime_P2_PCombo_PlayerName_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P2_PCombo_PlayerName_ClientState',
                 '{"logEntries":[],"value":"1036745_Guest","text":"Bajramovic,  Diana","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P2$transport$oCombo', 'Riding with Caddie');
-            formData.append('ctl00_ctrl_MakeTeeTime_P2_transport_oCombo_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P2_transport_oCombo_ClientState',
                 '{"logEntries":[],"value":"205","text":"Riding with Caddie","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P2$transport$mobileComboSelected', '');
             formData.append('ctl00$ctrl_MakeTeeTime$P2$groupNum', '0');
@@ -493,10 +493,10 @@ class GolfBookingService {
             // Player 3 (Guest - Louie Belpedio)
             formData.append('ctl00$ctrl_MakeTeeTime$P3$chkNotify', 'on');
             formData.append('ctl00$ctrl_MakeTeeTime$P3$PCombo$PlayerName', 'belpedio,  louie');
-            formData.append('ctl00_ctrl_MakeTeeTime_P3_PCombo_PlayerName_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P3_PCombo_PlayerName_ClientState',
                 '{"logEntries":[],"value":"1051175_Guest","text":"belpedio,  louie","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P3$transport$oCombo', 'Riding with Caddie');
-            formData.append('ctl00_ctrl_MakeTeeTime_P3_transport_oCombo_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P3_transport_oCombo_ClientState',
                 '{"logEntries":[],"value":"205","text":"Riding with Caddie","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P3$transport$mobileComboSelected', '');
             formData.append('ctl00$ctrl_MakeTeeTime$P3$groupNum', '0');
@@ -504,10 +504,10 @@ class GolfBookingService {
             // Player 4 (Guest - Dennis Francese)
             formData.append('ctl00$ctrl_MakeTeeTime$P4$chkNotify', 'on');
             formData.append('ctl00$ctrl_MakeTeeTime$P4$PCombo$PlayerName', 'Francese,  Dennis');
-            formData.append('ctl00_ctrl_MakeTeeTime_P4_PCombo_PlayerName_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P4_PCombo_PlayerName_ClientState',
                 '{"logEntries":[],"value":"1036744_Guest","text":"Francese,  Dennis","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P4$transport$oCombo', 'Riding with Caddie');
-            formData.append('ctl00_ctrl_MakeTeeTime_P4_transport_oCombo_ClientState', 
+            formData.append('ctl00_ctrl_MakeTeeTime_P4_transport_oCombo_ClientState',
                 '{"logEntries":[],"value":"205","text":"Riding with Caddie","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}');
             formData.append('ctl00$ctrl_MakeTeeTime$P4$transport$mobileComboSelected', '');
             formData.append('ctl00$ctrl_MakeTeeTime$P4$groupNum', '0');
@@ -521,12 +521,12 @@ class GolfBookingService {
             formData.append('ctl00$ctrl_MakeTeeTime$drpCourseExclude$oCombo', '');
             formData.append('ctl00_ctrl_MakeTeeTime_drpCourseExclude_oCombo_ClientState', '');
             formData.append('ctl00$ctrl_MakeTeeTime$drpCourseExclude$mobileComboSelected', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$txtComments', 'Write a comment');
             formData.append('ctl00_ctrl_MakeTeeTime_txtComments_ClientState', '{"enabled":true,"emptyMessage":"Write a comment","validationText":"","valueAsString":"","lastSetTextBoxValue":"Write a comment"}');
             formData.append('ctl00$ctrl_MakeTeeTime$txtNotes', 'Write a note');
             formData.append('ctl00_ctrl_MakeTeeTime_txtNotes_ClientState', '{"enabled":true,"emptyMessage":"Write a note","validationText":"","valueAsString":"","lastSetTextBoxValue":"Write a note"}');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$ddlRecurr$tCombo', 'No Schedule');
             formData.append('ctl00_ctrl_MakeTeeTime_ddlRecurr_tCombo_ClientState', '');
             formData.append('ctl00$ctrl_MakeTeeTime$rdRecurrEnd$tMDateBox', '');
@@ -534,7 +534,7 @@ class GolfBookingService {
             formData.append('ctl00$ctrl_MakeTeeTime$drpStatus$tCombo', '');
             formData.append('ctl00_ctrl_MakeTeeTime_drpStatus_tCombo_ClientState', '');
             formData.append('ctl00_ctrl_MakeTeeTime_mpOptions_ClientState', '');
-            
+
             formData.append('ctl00$ctrl_MakeTeeTime$playersUpdated', '1');
             formData.append('ctl00$ctrl_MakeTeeTime$removePlayerNumber', '0');
             formData.append('PageX', '0');
@@ -677,4 +677,4 @@ class GolfBookingService {
     }
 }
 
-module.exports = GolfBookingService;
+export default GolfBookingService;
