@@ -12,8 +12,8 @@ dist
 dist-ssr
 *.local
 
-backend/.claude
-backend/teesheet.html
+.claude
+teesheet.html
 
 
 # Editor directories and files
