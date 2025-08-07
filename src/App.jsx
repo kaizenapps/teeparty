@@ -1,3 +1,4 @@
+// src/App.jsx - Updated for merged service with relative API paths
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, Settings, CheckCircle, XCircle, AlertCircle, RefreshCw, Trash2, Play } from 'lucide-react';
 
@@ -15,7 +16,8 @@ const App = () => {
     const [activeTab, setActiveTab] = useState('bookings');
     const [showWeekendsOnly, setShowWeekendsOnly] = useState(false);
 
-    const API_URL = 'http://localhost:3001/api';
+    // Use relative paths - no need for absolute URL anymore
+    const API_URL = '/api';
 
     useEffect(() => {
         fetchBookings();
@@ -161,7 +163,6 @@ const App = () => {
         }
     };
 
-
     const triggerBooking = async (id) => {
         setLoading(true);
         try {
@@ -230,7 +231,6 @@ const App = () => {
 
         return dates;
     };
-
 
     return (
         <div className="min-h-screen bg-gray-100">

@@ -1,14 +1,26 @@
-// backend/server.js - Complete Final Version
-const express = require('express');
-const cors = require('cors');
-const mysql = require('mysql2/promise');
-const cron = require('node-cron');
-const GolfBookingService = require('./bookingService');
-require('dotenv').config();
+// server.js - Merged Frontend + Backend Service (ES Modules)
+import express from 'express';
+import cors from 'cors';
+import mysql from 'mysql2/promise';
+import cron from 'node-cron';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import GolfBookingService from './bookingService.js';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the React build
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Database configuration
 const dbConfig = {
@@ -111,7 +123,7 @@ async function processBooking(booking, userSettings) {
     }
 }
 
-// API Routes
+// API Routes - All prefixed with /api
 
 // Get user settings
 app.get('/api/settings', async (req, res) => {
@@ -171,33 +183,33 @@ app.get('/api/bookings', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id, user_id, DATE_FORMAT(date, '%c/%e/%Y') as date_formatted,
                     DATE_FORMAT(date, '%M %e, %Y') as date_long_format,
-                    date as date_raw, preferred_time, max_time, status, attempts, 
-                    last_attempt, booking_opens_at, created_at
+                 date as date_raw, preferred_time, max_time, status, attempts,
+                 last_attempt, booking_opens_at, created_at
              FROM booking_preferences
              WHERE date >= CURDATE()
              ORDER BY date ASC, preferred_time ASC`
         );
-        
+
         // Format dates properly for frontend display
         const formattedRows = rows.map(row => {
             const dateObj = new Date(row.date_raw);
             return {
                 ...row,
-                date: `Scheduled for ${row.date_long_format}`, // Force string format that can't be parsed
-                date_display: row.date_formatted, // Keep short format available
-                date_string: row.date_long_format, // Guaranteed string format
-                date_safe: dateObj.toLocaleDateString('en-US', { 
+                date: `Scheduled for ${row.date_long_format}`,
+                date_display: row.date_formatted,
+                date_string: row.date_long_format,
+                date_safe: dateObj.toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
-                    month: 'long', 
+                    month: 'long',
                     day: 'numeric'
-                }), // Safe formatted date
+                }),
                 booking_opens_at: new Date(row.booking_opens_at).toLocaleString('en-US'),
                 created_at: new Date(row.created_at).toLocaleString('en-US'),
                 last_attempt: row.last_attempt ? new Date(row.last_attempt).toLocaleString('en-US') : null
             };
         });
-        
+
         res.json(formattedRows);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -421,8 +433,6 @@ app.post('/api/bookings/:id/trigger', async (req, res) => {
 // View tee sheet results in HTML
 app.get('/api/view/teesheet', async (req, res) => {
     try {
-        const fs = require('fs');
-
         if (!fs.existsSync('teesheet.html')) {
             return res.status(404).json({
                 error: 'No teesheet.html file found',
@@ -546,8 +556,6 @@ app.get('/api/view/teesheet', async (req, res) => {
 // Get debug slots info
 app.get('/api/debug/slots', async (req, res) => {
     try {
-        const fs = require('fs');
-
         if (!fs.existsSync('teesheet.html')) {
             return res.status(404).json({ error: 'No teesheet.html file' });
         }
@@ -588,10 +596,10 @@ cron.schedule('* * * * *', async () => {
 
         // Find ALL pending bookings for dates that haven't passed yet
         const [pendingBookings] = await pool.query(
-            `SELECT * FROM booking_preferences 
-       WHERE status = 'pending' 
-       AND date >= CURDATE()
-       AND (last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))`
+            `SELECT * FROM booking_preferences
+             WHERE status = 'pending'
+               AND date >= CURDATE()
+               AND (last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))`
         );
 
         console.log(`📊 Found ${pendingBookings.length} pending bookings to check for available slots`);
@@ -679,6 +687,11 @@ cron.schedule('* * * * *', async () => {
     }
 });
 
+// Catch all handler - serve React app for any route not handled by API
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
@@ -689,6 +702,8 @@ app.listen(PORT, async () => {
 🌐 URL: http://localhost:${PORT}
 ⏰ Automated booking checker: Active (runs every minute)
 📅 Time: ${new Date().toLocaleString()}
+
+Navigate to http://localhost:${PORT} to access the web interface.
 
 Debug URLs:
 - View Tee Sheet: http://localhost:${PORT}/api/view/teesheet
