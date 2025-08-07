@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Golf tee time booking automation system",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "vite",

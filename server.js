@@ -1,4 +1,4 @@
-// server.js - Merged Frontend + Backend Service (ES Modules)
+// server.js - Complete Updated Server with Enhanced Weekend Automation
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
@@ -9,6 +9,7 @@ import { dirname } from 'path';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import GolfBookingService from './bookingService.js';
+import WeekendAutomation from './weekendAutomation.js';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ const dbConfig = {
 
 let pool;
 const bookingService = new GolfBookingService();
+let weekendAutomation;
 
 // Initialize database connection
 async function initDB() {
@@ -43,6 +45,10 @@ async function initDB() {
         pool = mysql.createPool(dbConfig);
         await pool.query('SELECT 1');
         console.log('✅ Database connected successfully');
+
+        // Initialize weekend automation after DB is ready
+        weekendAutomation = new WeekendAutomation(pool);
+        console.log('⛳ Weekend Automation initialized');
     } catch (error) {
         console.error('❌ Database connection failed:', error.message);
         process.exit(1);
@@ -177,6 +183,84 @@ app.post('/api/settings/credentials', async (req, res) => {
     }
 });
 
+// Get weekend auto-booking settings
+app.get('/api/weekend-settings', async (req, res) => {
+    try {
+        const [settings] = await pool.query('SELECT * FROM weekend_auto_settings WHERE user_id = 1');
+
+        if (settings.length === 0) {
+            // Create default settings
+            await pool.query(
+                'INSERT INTO weekend_auto_settings (user_id) VALUES (1)'
+            );
+            const [newSettings] = await pool.query('SELECT * FROM weekend_auto_settings WHERE user_id = 1');
+            res.json(newSettings[0]);
+        } else {
+            res.json(settings[0]);
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update weekend auto-booking settings (ENHANCED VERSION)
+app.post('/api/weekend-settings', async (req, res) => {
+    try {
+        const { enabled } = req.body;
+
+        await pool.query(
+            'UPDATE weekend_auto_settings SET is_enabled = ? WHERE user_id = 1',
+            [enabled]
+        );
+
+        // If enabling, immediately run catch-up check
+        if (enabled && weekendAutomation) {
+            console.log('🚀 Weekend auto-booking enabled - running immediate catch-up check...');
+
+            // Run catch-up in background (don't wait for it)
+            setTimeout(async () => {
+                await weekendAutomation.executeCatchUpBookings();
+            }, 1000);
+
+            res.json({
+                success: true,
+                message: `Weekend auto-booking enabled! Running immediate check for available weekends...`
+            });
+        } else {
+            res.json({
+                success: true,
+                message: `Weekend auto-booking ${enabled ? 'enabled' : 'disabled'}`
+            });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get upcoming weekends status
+app.get('/api/upcoming-weekends', async (req, res) => {
+    try {
+        const weekends = await weekendAutomation.getUpcomingWeekends();
+        res.json(weekends);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get weekend booking history
+app.get('/api/weekend-history', async (req, res) => {
+    try {
+        const [history] = await pool.query(
+            `SELECT * FROM weekend_booking_history 
+             ORDER BY created_at DESC 
+             LIMIT 20`
+        );
+        res.json(history);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get all bookings
 app.get('/api/bookings', async (req, res) => {
     try {
@@ -184,7 +268,7 @@ app.get('/api/bookings', async (req, res) => {
             `SELECT id, user_id, DATE_FORMAT(date, '%c/%e/%Y') as date_formatted,
                     DATE_FORMAT(date, '%M %e, %Y') as date_long_format,
                  date as date_raw, preferred_time, max_time, status, attempts,
-                 last_attempt, booking_opens_at, created_at
+                 last_attempt, booking_opens_at, created_at, booking_type
              FROM booking_preferences
              WHERE date >= CURDATE()
              ORDER BY date ASC, preferred_time ASC`
@@ -206,7 +290,8 @@ app.get('/api/bookings', async (req, res) => {
                 }),
                 booking_opens_at: new Date(row.booking_opens_at).toLocaleString('en-US'),
                 created_at: new Date(row.created_at).toLocaleString('en-US'),
-                last_attempt: row.last_attempt ? new Date(row.last_attempt).toLocaleString('en-US') : null
+                last_attempt: row.last_attempt ? new Date(row.last_attempt).toLocaleString('en-US') : null,
+                is_weekend_auto: row.booking_type === 'weekend_auto'
             };
         });
 
@@ -216,7 +301,7 @@ app.get('/api/bookings', async (req, res) => {
     }
 });
 
-// Add new booking preference
+// Add new booking preference (manual)
 app.post('/api/bookings', async (req, res) => {
     try {
         const { date, preferredTime, maxTime } = req.body;
@@ -242,11 +327,11 @@ app.post('/api/bookings', async (req, res) => {
         }
 
         const [result] = await pool.query(
-            'INSERT INTO booking_preferences (user_id, date, preferred_time, max_time, booking_opens_at, status) VALUES (?, ?, ?, ?, ?, ?)',
-            [1, date, preferredTime || '07:54:00', maxTime || '13:00:00', opensAt, 'pending']
+            'INSERT INTO booking_preferences (user_id, date, preferred_time, max_time, booking_opens_at, status, booking_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [1, date, preferredTime || '07:54:00', maxTime || '13:00:00', opensAt, 'pending', 'manual']
         );
 
-        await logBookingAttempt(result.insertId, 'created', 'info', `Booking scheduled for ${date}`);
+        await logBookingAttempt(result.insertId, 'created', 'info', `Manual booking scheduled for ${date}`);
 
         res.json({
             success: true,
@@ -584,28 +669,109 @@ app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        database: pool ? 'connected' : 'disconnected'
+        database: pool ? 'connected' : 'disconnected',
+        weekendAutomation: weekendAutomation ? 'enabled' : 'disabled'
     });
 });
 
-// Automated booking checker - runs every minute
+
+
+// Add this new endpoint to server.js after the existing weekend endpoints (around line 250)
+
+// Force refresh weekend status (useful after manual attempts)
+app.post('/api/weekend-refresh', async (req, res) => {
+    try {
+        if (!weekendAutomation) {
+            return res.status(500).json({ error: 'Weekend automation not initialized' });
+        }
+
+        console.log('🔄 Manually refreshing weekend status...');
+
+        // Get updated status
+        const weekends = await weekendAutomation.getUpcomingWeekends();
+
+        // Return the updated weekends
+        res.json({
+            success: true,
+            message: 'Weekend status refreshed',
+            weekends: weekends
+        });
+    } catch (error) {
+        console.error('Error refreshing weekend status:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// Add manual attempt trigger for specific weekend
+app.post('/api/weekend-attempt/:date', async (req, res) => {
+    try {
+        const { date } = req.params;
+
+        if (!weekendAutomation) {
+            return res.status(500).json({ error: 'Weekend automation not initialized' });
+        }
+
+        // Check if enabled
+        const [settings] = await pool.query('SELECT is_enabled FROM weekend_auto_settings WHERE user_id = 1');
+        if (!settings[0]?.is_enabled) {
+            return res.status(400).json({ error: 'Weekend auto-booking is disabled' });
+        }
+
+        // Parse the date
+        const targetDate = new Date(date + 'T12:00:00');
+        const dayOfWeek = targetDate.getDay();
+
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            return res.status(400).json({ error: 'Date must be a Saturday or Sunday' });
+        }
+
+        console.log(`⚡ Manual trigger for weekend booking: ${date}`);
+
+        // Execute booking attempt
+        const result = await weekendAutomation.executeWeekendBooking(targetDate, 'manual');
+
+        if (result?.success) {
+            res.json({
+                success: true,
+                message: `Successfully booked ${date} at ${result.slot?.time}`,
+                slot: result.slot
+            });
+        } else {
+            res.json({
+                success: false,
+                message: result?.message || 'Booking attempt failed',
+                details: result
+            });
+        }
+    } catch (error) {
+        console.error('Manual weekend attempt error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// ===============================
+// CRON JOBS
+// ===============================
+
+// 1. EXISTING: Automated booking checker for manual bookings - runs every minute
 cron.schedule('* * * * *', async () => {
     try {
         const now = new Date();
         console.log(`🔄 Cron check at ${now.toLocaleTimeString()}`);
 
-        // Find ALL pending bookings for dates that haven't passed yet
+        // Find ALL pending MANUAL bookings for dates that haven't passed yet
         const [pendingBookings] = await pool.query(
             `SELECT * FROM booking_preferences
              WHERE status = 'pending'
+               AND booking_type = 'manual'
                AND date >= CURDATE()
                AND (last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))`
         );
 
-        console.log(`📊 Found ${pendingBookings.length} pending bookings to check for available slots`);
+        console.log(`📊 Found ${pendingBookings.length} pending manual bookings to check`);
 
         if (pendingBookings.length > 0) {
-            console.log(`⏰ Found ${pendingBookings.length} bookings to process`);
+            console.log(`⏰ Found ${pendingBookings.length} manual bookings to process`);
 
             const [userSettings] = await pool.query('SELECT * FROM user_settings WHERE id = 1');
 
@@ -620,9 +786,9 @@ cron.schedule('* * * * *', async () => {
 
                 // If booking opens in less than 30 seconds, wait for optimal timing
                 if (timeUntilOpen > 0 && timeUntilOpen < 30000) {
-                    console.log(`⏳ Booking window opens in ${Math.round(timeUntilOpen / 1000)}s - waiting for optimal timing...`);
+                    console.log(`⏳ Manual booking window opens in ${Math.round(timeUntilOpen / 1000)}s - waiting...`);
                     setTimeout(async () => {
-                        console.log(`🎯 Attempting booking for ${booking.date} (optimal window)`);
+                        console.log(`🎯 Attempting manual booking for ${booking.date}`);
 
                         await logBookingAttempt(booking.id, 'auto_attempt', 'info', 'Automated booking attempt started (optimal timing)');
 
@@ -652,7 +818,7 @@ cron.schedule('* * * * *', async () => {
                     }, timeUntilOpen);
                 } else {
                     // Either booking window is already open or far in future - check availability now
-                    console.log(`🎯 Checking availability for ${booking.date}`);
+                    console.log(`🎯 Checking availability for manual booking ${booking.date}`);
 
                     await logBookingAttempt(booking.id, 'auto_attempt', 'info', 'Automated booking attempt started');
 
@@ -683,8 +849,52 @@ cron.schedule('* * * * *', async () => {
             }
         }
     } catch (error) {
-        console.error('❌ Cron job error:', error);
+        console.error('❌ Manual booking cron error:', error);
     }
+});
+
+// 2. NEW: Weekend catch-up mode - runs every 30 minutes
+cron.schedule('*/30 * * * *', async () => {
+    try {
+        if (!weekendAutomation) return;
+
+        const now = new Date();
+        console.log(`🔄 [${now.toLocaleTimeString()}] Running weekend catch-up check...`);
+
+        await weekendAutomation.executeCatchUpBookings();
+    } catch (error) {
+        console.error('❌ Catch-up cron error:', error);
+    }
+});
+
+// 3. Weekend pre-warm connection - runs at 6:29:30 AM EDT on weekends
+cron.schedule('30 29 6 * * 0,6', async () => {
+    try {
+        if (!weekendAutomation) return;
+
+        const now = weekendAutomation.getCurrentEDT();
+        console.log(`🔥 [${now.toLocaleTimeString()}] Pre-warming for weekend booking...`);
+        await weekendAutomation.preWarmConnection();
+    } catch (error) {
+        console.error('❌ Pre-warm error:', error);
+    }
+}, {
+    timezone: "America/New_York"
+});
+
+// 4. Weekend real-time booking - runs at 6:30 AM EDT on weekends
+cron.schedule('0-10 30 6 * * 0,6', async () => {
+    try {
+        if (!weekendAutomation) return;
+
+        const now = weekendAutomation.getCurrentEDT();
+        console.log(`🎯 [${now.toLocaleTimeString()}] WEEKEND REAL-TIME BOOKING WINDOW!`);
+        await weekendAutomation.executeRealTimeBooking();
+    } catch (error) {
+        console.error('❌ Weekend real-time booking error:', error);
+    }
+}, {
+    timezone: "America/New_York"
 });
 
 // Catch all handler - serve React app for any route not handled by API
@@ -696,18 +906,41 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
     await initDB();
+
+    // Run initial catch-up check after 5 seconds if weekend booking is enabled
+    setTimeout(async () => {
+        if (weekendAutomation) {
+            const [settings] = await pool.query('SELECT is_enabled FROM weekend_auto_settings WHERE user_id = 1');
+            if (settings[0]?.is_enabled) {
+                console.log('🚀 Running initial weekend catch-up check...');
+                await weekendAutomation.executeCatchUpBookings();
+            }
+        }
+    }, 5000);
+
     console.log(`
 🚀 Golf Booking Server Started
 📍 Port: ${PORT}
 🌐 URL: http://localhost:${PORT}
-⏰ Automated booking checker: Active (runs every minute)
+⏰ Manual booking checker: Active (every minute)
+⛳ Weekend auto-booking: Active (Sat/Sun at 6:30 AM EDT)
+🔄 Weekend catch-up: Active (every 30 minutes)
+📊 Max weekend bookings: 4
 📅 Time: ${new Date().toLocaleString()}
 
 Navigate to http://localhost:${PORT} to access the web interface.
+
+Weekend Auto-Booking Features:
+- Immediate catch-up when enabled (books already-open weekends)
+- Every 30 minutes: Checks for bookable weekends
+- Every Sat/Sun 6:30 AM EDT: Books exactly 7 days ahead
+- Time Range: 7:50 AM - 1:00 PM (no expansion)
+- Maximum: 4 weekends booked at once
 
 Debug URLs:
 - View Tee Sheet: http://localhost:${PORT}/api/view/teesheet
 - Debug Slots: http://localhost:${PORT}/api/debug/slots
 - Health Check: http://localhost:${PORT}/api/health
+- Weekend History: http://localhost:${PORT}/api/weekend-history
   `);
 });
