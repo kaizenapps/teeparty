@@ -12,9 +12,10 @@ dist
 dist-ssr
 *.local
 
-# this is from base project
-.claude
+backend/.claude
 backend/teesheet.html
+
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
