@@ -15,7 +15,9 @@ dist-ssr
 .claude
 
 teesheet.html
-
+docker-compose.yml
+dockerfile
+schema.sql
 
 # Editor directories and files
 .vscode/*
