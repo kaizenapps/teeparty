@@ -1,8 +1,14 @@
 // src/App.jsx - Complete Updated File with Weekend Auto-Booking and Auto-Refresh
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Settings, CheckCircle, XCircle, AlertCircle, RefreshCw, Trash2, Play, Zap } from 'lucide-react';
+import { Calendar, Clock, Settings, CheckCircle, XCircle, AlertCircle, RefreshCw, Trash2, Play, Zap, LogOut } from 'lucide-react';
+import Login from './components/Login';
 
 const App = () => {
+    // Authentication state
+    const [user, setUser] = useState(null);
+    const [isAuthenticating, setIsAuthenticating] = useState(true);
+    const [authToken, setAuthToken] = useState(null);
+    
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [bookings, setBookings] = useState([]);
     const [newBooking, setNewBooking] = useState({
@@ -28,27 +34,108 @@ const App = () => {
     // Use relative paths
     const API_URL = '/api';
 
-    useEffect(() => {
-        fetchBookings();
-        fetchSettings();
-        fetchWeekendSettings().then(() => {
-            // Start auto-refresh if weekend booking is enabled
-            if (weekendSettings.is_enabled) {
-                startAutoRefresh();
+    // Authentication functions
+    const handleLogin = (userData) => {
+        setUser(userData);
+        setIsAuthenticating(false);
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('golf_auth_token');
+        setUser(null);
+        setAuthToken(null);
+        stopAutoRefresh();
+    };
+
+    const verifyAuth = async () => {
+        console.log('Verifying auth...');
+        const token = localStorage.getItem('golf_auth_token');
+        console.log('Token found:', !!token);
+        
+        if (!token) {
+            console.log('No token, showing login');
+            setIsAuthenticating(false);
+            return;
+        }
+        setAuthToken(token);
+
+        try {
+            const response = await fetch(`${API_URL}/auth/verify`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    setUser(data.user);
+                } else {
+                    handleLogout();
+                }
+            } else {
+                handleLogout();
             }
-        });
-        fetchUpcomingWeekends();
-        fetchWeekendHistory();
+        } catch (error) {
+            console.error('Auth verification failed:', error);
+            handleLogout();
+        }
+        console.log('Auth verification complete');
+        setIsAuthenticating(false);
+    };
+
+    // Helper function to make authenticated API calls
+    const authenticatedFetch = async (url, options = {}) => {
+        const token = localStorage.getItem('golf_auth_token');
+        if (!token) {
+            handleLogout();
+            return;
+        }
+
+        const headers = {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+
+        const response = await fetch(url, { ...options, headers });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        return response;
+    };
+
+    useEffect(() => {
+        verifyAuth();
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            fetchBookings();
+            fetchSettings();
+            fetchWeekendSettings().then(() => {
+                // Start auto-refresh if weekend booking is enabled
+                if (weekendSettings.is_enabled) {
+                    startAutoRefresh();
+                }
+            });
+            fetchUpcomingWeekends();
+            fetchWeekendHistory();
+        }
 
         // Cleanup on unmount
         return () => {
             stopAutoRefresh();
         };
-    }, []);
+    }, [user]);
 
     const fetchSettings = async () => {
         try {
-            const response = await fetch(`${API_URL}/settings`);
+            const response = await authenticatedFetch(`${API_URL}/settings`);
+            if (!response) return;
             const data = await response.json();
             if (data.username) {
                 setCredentials({ username: data.username, password: '' });
@@ -60,7 +147,8 @@ const App = () => {
 
     const fetchWeekendSettings = async () => {
         try {
-            const response = await fetch(`${API_URL}/weekend-settings`);
+            const response = await authenticatedFetch(`${API_URL}/weekend-settings`);
+            if (!response) return;
             const data = await response.json();
             setWeekendSettings(data);
         } catch (error) {
@@ -70,7 +158,8 @@ const App = () => {
 
     const fetchUpcomingWeekends = async () => {
         try {
-            const response = await fetch(`${API_URL}/upcoming-weekends`);
+            const response = await authenticatedFetch(`${API_URL}/upcoming-weekends`);
+            if (!response) return;
             const data = await response.json();
             setUpcomingWeekends(data);
         } catch (error) {
@@ -80,7 +169,8 @@ const App = () => {
 
     const fetchWeekendHistory = async () => {
         try {
-            const response = await fetch(`${API_URL}/weekend-history`);
+            const response = await authenticatedFetch(`${API_URL}/weekend-history`);
+            if (!response) return;
             const data = await response.json();
             setWeekendHistory(data);
         } catch (error) {
@@ -116,9 +206,8 @@ const App = () => {
 
         try {
             const newState = !weekendSettings.is_enabled;
-            const response = await fetch(`${API_URL}/weekend-settings`, {
+            const response = await authenticatedFetch(`${API_URL}/weekend-settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: newState })
             });
 
@@ -167,7 +256,8 @@ const App = () => {
 
     const fetchBookings = async () => {
         try {
-            const response = await fetch(`${API_URL}/bookings`);
+            const response = await authenticatedFetch(`${API_URL}/bookings`);
+            if (!response) return;
             const data = await response.json();
             setBookings(data);
 
@@ -182,7 +272,8 @@ const App = () => {
 
     const fetchLogs = async (bookingId) => {
         try {
-            const response = await fetch(`${API_URL}/logs/${bookingId}`);
+            const response = await authenticatedFetch(`${API_URL}/logs/${bookingId}`);
+            if (!response) return;
             const data = await response.json();
             setLogs(prev => ({ ...prev, [bookingId]: data }));
         } catch (error) {
@@ -194,9 +285,8 @@ const App = () => {
         setLoading(true);
         setMessage('');
         try {
-            const response = await fetch(`${API_URL}/settings/credentials`, {
+            const response = await authenticatedFetch(`${API_URL}/settings/credentials`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(credentials)
             });
             const data = await response.json();
@@ -221,9 +311,8 @@ const App = () => {
 
         setLoading(true);
         try {
-            const response = await fetch(`${API_URL}/bookings`, {
+            const response = await authenticatedFetch(`${API_URL}/bookings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newBooking)
             });
             const data = await response.json();
@@ -243,11 +332,8 @@ const App = () => {
         if (!confirm('Are you sure you want to delete this booking?')) return;
 
         try {
-            const response = await fetch(`${API_URL}/bookings/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
+            const response = await authenticatedFetch(`${API_URL}/bookings/${id}`, {
+                method: 'DELETE'
             });
 
             if (!response.ok) {
@@ -286,7 +372,7 @@ const App = () => {
     const triggerBooking = async (id) => {
         setLoading(true);
         try {
-            const response = await fetch(`${API_URL}/bookings/${id}/trigger`, {
+            const response = await authenticatedFetch(`${API_URL}/bookings/${id}/trigger`, {
                 method: 'POST'
             });
             const data = await response.json();
@@ -364,12 +450,49 @@ const App = () => {
         });
     };
 
+    console.log('Render state:', { isAuthenticating, user: !!user });
+
+    // Show loading screen while authenticating
+    if (isAuthenticating) {
+        return (
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Show login page if not authenticated
+    if (!user) {
+        console.log('Showing login page');
+        return <Login onLogin={handleLogin} />;
+    }
+
+    console.log('Showing main app');
+
     return (
         <div className="min-h-screen bg-gray-100">
             <div className="container mx-auto p-4 max-w-7xl">
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800 mb-2">⛳ Golf Tee Time Automation</h1>
-                    <p className="text-gray-600">Trump National Colts Neck - Automated Booking System</p>
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">⛳ Golf Tee Time Automation</h1>
+                            <p className="text-gray-600">Trump National Colts Neck - Automated Booking System</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <span className="text-sm text-gray-600">Welcome, {user.username}</span>
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md"
+                                title="Logout"
+                            >
+                                <LogOut size={16} />
+                                Logout
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {message && (

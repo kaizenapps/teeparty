@@ -544,6 +544,9 @@ class GolfBookingService {
 
             // Make the actual booking request
             console.log('Making booking request...');
+            console.log(`🔍 DEBUG: Booking slot.time = "${slot.time}" for date ${slot.date}`);
+            console.log(`🔍 DEBUG: Form data time field = "${formData.get('ctl00$ctrl_MakeTeeTime$drpTime$tCombo')}"`);
+            
             const response = await this.client.post(
                 `${this.baseURL}/dialog.aspx`,
                 formData.toString(),
@@ -583,12 +586,33 @@ class GolfBookingService {
             // Check if booking was successful
             const responseText = response.data;
             console.log('Reservation response received, length:', responseText.length);
+            
+            // Save response for debugging
+            fs.writeFileSync('booking_response.html', responseText);
+            console.log('🔍 DEBUG: Saved booking response to booking_response.html');
+
+            // Parse actual booked time from response
+            let actualBookedTime = slot.time; // Default to what we requested
+            
+            // Try to extract actual booked time from response
+            const timePattern = /(\d{1,2}:\d{2}\s*(?:AM|PM))/gi;
+            const timeMatches = responseText.match(timePattern);
+            if (timeMatches && timeMatches.length > 0) {
+                // Look for time patterns in the response that might indicate the actual booking
+                console.log('🔍 DEBUG: Found time patterns in response:', timeMatches);
+                // For now, just log them - we'll need to analyze the response structure
+            }
 
             if (responseText.includes('successfully') || responseText.includes('confirmed') || responseText.includes('Confirmation')) {
+                console.log(`✅ Booking confirmed! Requested: ${slot.time}, Checking actual booked time...`);
                 return {
                     success: true,
                     message: 'Booking confirmed!',
-                    slot: slot,
+                    slot: {
+                        ...slot,
+                        requestedTime: slot.time,
+                        actualTime: actualBookedTime
+                    },
                     response: responseText.substring(0, 500)
                 };
             } else if (responseText.includes('error') || responseText.includes('failed')) {

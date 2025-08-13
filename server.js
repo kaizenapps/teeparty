@@ -20,6 +20,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Simple JWT-like token generation for demo purposes
+function generateAuthToken(username) {
+    return Buffer.from(`${username}:${Date.now()}`).toString('base64');
+}
+
+// Authentication middleware
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+        return res.status(401).json({ error: 'Access token required' });
+    }
+
+    try {
+        // Simple token validation - in production use proper JWT
+        const decoded = Buffer.from(token, 'base64').toString('ascii');
+        const [username, timestamp] = decoded.split(':');
+        
+        // Token expires after 24 hours
+        if (Date.now() - parseInt(timestamp) > 24 * 60 * 60 * 1000) {
+            return res.status(401).json({ error: 'Token expired' });
+        }
+
+        req.user = { username };
+        next();
+    } catch (error) {
+        return res.status(401).json({ error: 'Invalid token' });
+    }
+}
+
 // Serve static files from the React build
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -131,8 +162,82 @@ async function processBooking(booking, userSettings) {
 
 // API Routes - All prefixed with /api
 
+// Authentication routes
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ success: false, message: 'Username and password required' });
+        }
+
+        console.log('🔐 Authenticating user:', username);
+
+        // Get admin credentials from environment variables
+        const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+        const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'golf123';
+
+        if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+            console.log('❌ Invalid credentials');
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid credentials' 
+            });
+        }
+
+        console.log('✅ Authentication successful');
+
+        // Check if user settings exist and get the golf credentials
+        const [existing] = await pool.query('SELECT username as golf_username, password_encrypted FROM user_settings WHERE id = 1');
+
+        if (existing.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Golf club credentials not configured. Please set up your golf club username and password first.' 
+            });
+        }
+
+        // Generate auth token for the app
+        const appToken = generateAuthToken(username);
+
+        res.json({
+            success: true,
+            message: 'Authentication successful',
+            token: appToken,
+            user: {
+                username: username,
+                golf_username: existing[0].golf_username,
+                id: 1
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ success: false, message: 'Login failed' });
+    }
+});
+
+// Verify token endpoint
+app.get('/api/auth/verify', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT id, username FROM user_settings WHERE id = 1');
+        if (rows.length > 0) {
+            res.json({
+                success: true,
+                user: {
+                    id: rows[0].id,
+                    username: rows[0].username
+                }
+            });
+        } else {
+            res.status(404).json({ success: false, message: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Verification failed' });
+    }
+});
+
 // Get user settings
-app.get('/api/settings', async (req, res) => {
+app.get('/api/settings', authenticateToken, async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT id, username, created_at, updated_at FROM user_settings WHERE id = 1');
         res.json(rows[0] || { username: '' });
@@ -142,7 +247,7 @@ app.get('/api/settings', async (req, res) => {
 });
 
 // Update and verify credentials
-app.post('/api/settings/credentials', async (req, res) => {
+app.post('/api/settings/credentials', authenticateToken, async (req, res) => {
     try {
         const { username, password } = req.body;
 
@@ -184,7 +289,7 @@ app.post('/api/settings/credentials', async (req, res) => {
 });
 
 // Get weekend auto-booking settings
-app.get('/api/weekend-settings', async (req, res) => {
+app.get('/api/weekend-settings', authenticateToken, async (req, res) => {
     try {
         const [settings] = await pool.query('SELECT * FROM weekend_auto_settings WHERE user_id = 1');
 
@@ -204,7 +309,7 @@ app.get('/api/weekend-settings', async (req, res) => {
 });
 
 // Update weekend auto-booking settings (ENHANCED VERSION)
-app.post('/api/weekend-settings', async (req, res) => {
+app.post('/api/weekend-settings', authenticateToken, async (req, res) => {
     try {
         const { enabled } = req.body;
 
@@ -238,7 +343,7 @@ app.post('/api/weekend-settings', async (req, res) => {
 });
 
 // Get upcoming weekends status
-app.get('/api/upcoming-weekends', async (req, res) => {
+app.get('/api/upcoming-weekends', authenticateToken, async (req, res) => {
     try {
         const weekends = await weekendAutomation.getUpcomingWeekends();
         res.json(weekends);
@@ -248,7 +353,7 @@ app.get('/api/upcoming-weekends', async (req, res) => {
 });
 
 // Get weekend booking history
-app.get('/api/weekend-history', async (req, res) => {
+app.get('/api/weekend-history', authenticateToken, async (req, res) => {
     try {
         const [history] = await pool.query(
             `SELECT * FROM weekend_booking_history 
@@ -262,7 +367,7 @@ app.get('/api/weekend-history', async (req, res) => {
 });
 
 // Get all bookings
-app.get('/api/bookings', async (req, res) => {
+app.get('/api/bookings', authenticateToken, async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT id, user_id, DATE_FORMAT(date, '%c/%e/%Y') as date_formatted,
@@ -302,7 +407,7 @@ app.get('/api/bookings', async (req, res) => {
 });
 
 // Add new booking preference (manual)
-app.post('/api/bookings', async (req, res) => {
+app.post('/api/bookings', authenticateToken, async (req, res) => {
     try {
         const { date, preferredTime, maxTime } = req.body;
 
@@ -345,7 +450,7 @@ app.post('/api/bookings', async (req, res) => {
 });
 
 // Delete booking
-app.delete('/api/bookings/:id', async (req, res) => {
+app.delete('/api/bookings/:id', authenticateToken, async (req, res) => {
     try {
         // Delete logs first (foreign key constraint)
         await pool.query('DELETE FROM booking_logs WHERE preference_id = ?', [req.params.id]);
@@ -368,7 +473,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
 });
 
 // Get booking logs
-app.get('/api/logs/:preferenceId', async (req, res) => {
+app.get('/api/logs/:preferenceId', authenticateToken, async (req, res) => {
     try {
         const [rows] = await pool.query(
             'SELECT * FROM booking_logs WHERE preference_id = ? ORDER BY created_at DESC LIMIT 20',
@@ -381,7 +486,7 @@ app.get('/api/logs/:preferenceId', async (req, res) => {
 });
 
 // Manual trigger for testing
-app.post('/api/bookings/:id/trigger', async (req, res) => {
+app.post('/api/bookings/:id/trigger', authenticateToken, async (req, res) => {
     try {
         const [bookings] = await pool.query(
             'SELECT * FROM booking_preferences WHERE id = ? AND user_id = 1',
