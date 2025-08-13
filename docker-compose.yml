@@ -1,15 +1,7 @@
-version: "3.9"
-
 services:
   db:
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password
-    # Install mysql-client for mysqldump
-    entrypoint: |
-      bash -c "
-        apt-get update && apt-get install -y mysql-client &&
-        exec docker-entrypoint.sh --default-authentication-plugin=mysql_native_password
-      "
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
