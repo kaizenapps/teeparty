@@ -2,6 +2,106 @@
 
 An automated booking system for Trump National Colts Neck golf course that handles both manual and weekend auto-booking with intelligent scheduling and retry logic.
 
+## 🐳 Docker Deployment Guide (Preserving Database Data)
+
+### Quick Redeployment
+
+**Important**: This deployment method preserves your existing database data through Docker volumes.
+
+#### Prerequisites
+- Docker and Docker Compose installed
+- Existing `.env` file configured
+- Existing `dbdata` Docker volume with your data
+
+#### Redeployment Steps
+
+1. **Stop existing containers** (if running):
+   ```bash
+   docker-compose down
+   ```
+
+2. **Verify your database volume exists**:
+   ```bash
+   docker volume ls | grep dbdata
+   ```
+
+3. **Ensure your `.env` file is properly configured** (see Environment Configuration below)
+
+4. **Build and start services**:
+   ```bash
+   docker-compose up --build -d
+   ```
+
+5. **Verify deployment**:
+   ```bash
+   docker-compose ps
+   docker-compose logs -f
+   ```
+
+6. **Access application**: http://localhost:3001
+
+#### Database Backup (Recommended Before Redeployment)
+```bash
+# Create backup
+docker-compose exec db mysqladump -u root -p$DB_PASSWORD golf_booking > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# To restore if needed
+docker-compose exec -T db mysql -u root -p$DB_PASSWORD golf_booking < backup_file.sql
+```
+
+#### Environment Configuration
+
+Ensure your `.env` file contains:
+
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=golf_booking
+
+# Server Configuration
+PORT=3001
+NODE_ENV=production
+
+# Golf Site Configuration
+GOLF_SITE_URL=https://www.trumpcoltsneck.com
+COURSE_ID=95
+
+# Time Zone
+TZ=America/New_York
+
+# Admin Credentials
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your_admin_password
+```
+
+#### Docker Services
+
+- **MySQL Database**: Runs on MySQL 8.0 with persistent storage
+- **Application**: Node.js app with React frontend, runs on port 3001
+- **Volume**: `dbdata` volume preserves all database data between deployments
+
+#### Troubleshooting Docker Deployment
+
+**Database connection issues**:
+```bash
+docker-compose logs db
+docker-compose exec db mysql -u root -p$DB_PASSWORD golf_booking
+```
+
+**Application not starting**:
+```bash
+docker-compose logs app
+```
+
+**Data not persisting**:
+```bash
+docker volume inspect tee_dbdata
+```
+
+---
+
 ## 🌟 Features
 
 ### Core Features
