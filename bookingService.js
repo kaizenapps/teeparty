@@ -17,6 +17,7 @@ class GolfBookingService {
         this.client = wrapper(axios.create({
             jar: this.cookieJar,
             withCredentials: true,
+            timeout: 10000, // 10 second timeout for faster retries
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
@@ -154,75 +155,105 @@ class GolfBookingService {
         }
     }
 
-    // Get tee sheet for a specific date
-    async getTeeSheet(date) {
-        try {
-            // Ensure date is valid
-            if (typeof date === 'string') {
-                if (date.includes('GMT')) {
-                    date = new Date(date);
-                } else if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    date = new Date(date + 'T12:00:00');
+    // Get tee sheet for a specific date with retry logic
+    async getTeeSheet(date, maxRetries = 10) {
+        // Ensure date is valid
+        if (typeof date === 'string') {
+            if (date.includes('GMT')) {
+                date = new Date(date);
+            } else if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                date = new Date(date + 'T12:00:00');
+            } else {
+                date = new Date(date);
+            }
+        }
+
+        if (isNaN(date.getTime())) {
+            throw new Error(`Invalid date: ${date}`);
+        }
+
+        const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`📡 [Attempt ${attempt}/${maxRetries}] Fetching tee sheet for: ${formattedDate}`);
+
+                // Step 1: Load the initial booking page to get the form data
+                const initialResponse = await this.client.get(
+                    `${this.siteURL}/Default.aspx`,
+                    {
+                        params: {
+                            p: 'dynamicmodule',
+                            pageid: '100076',
+                            ssid: '100088',
+                            vnf: '1'
+                        }
+                    }
+                );
+
+                console.log('Initial page loaded, now updating date to:', formattedDate);
+
+                // Step 2: Make a request with the specific date parameter
+                const response = await this.client.get(
+                    `${this.siteURL}/Default.aspx`,
+                    {
+                        params: {
+                            p: 'dynamicmodule',
+                            pageid: '100076',
+                            ssid: '100088',
+                            vnf: '1',
+                            Date: formattedDate
+                        }
+                    }
+                );
+
+                console.log('Response received, length:', response.data.length);
+
+                // Debug: Save response
+                fs.writeFileSync('teesheet.html', response.data);
+                console.log('Saved response to teesheet.html');
+
+                // Check if we got the right page
+                if (response.data.includes('txtUsername') || response.data.includes('Login')) {
+                    throw new Error('Session expired - got login page');
+                }
+
+                if (response.data.includes('LaunchReserver')) {
+                    console.log('✅ Got tee sheet page with slots!');
+                }
+
+                return this.parseTeeSheet(response.data);
+                
+            } catch (error) {
+                console.error(`❌ [Attempt ${attempt}/${maxRetries}] Error fetching tee sheet:`, error.message);
+                
+                // Log more detailed error information
+                if (error.code === 'ETIMEDOUT') {
+                    console.error('❌ Network timeout - golf site may be slow or unreachable');
+                } else if (error.code === 'ECONNREFUSED') {
+                    console.error('❌ Connection refused - golf site may be down');
+                } else if (error.response) {
+                    console.error('❌ HTTP error:', error.response.status, error.response.statusText);
                 } else {
-                    date = new Date(date);
+                    console.error('❌ Network error details:', {
+                        code: error.code,
+                        errno: error.errno,
+                        syscall: error.syscall,
+                        address: error.address,
+                        port: error.port
+                    });
                 }
-            }
-
-            if (isNaN(date.getTime())) {
-                throw new Error(`Invalid date: ${date}`);
-            }
-
-            const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-            console.log(`Fetching tee sheet for: ${formattedDate}`);
-
-            // Step 1: Load the initial booking page to get the form data
-            const initialResponse = await this.client.get(
-                `${this.siteURL}/Default.aspx`,
-                {
-                    params: {
-                        p: 'dynamicmodule',
-                        pageid: '100076',
-                        ssid: '100088',
-                        vnf: '1'
-                    }
+                
+                // If this is the last attempt, throw the error
+                if (attempt === maxRetries) {
+                    throw new Error(`Network error after ${maxRetries} attempts: ${error.code || error.message}`);
                 }
-            );
-
-            console.log('Initial page loaded, now updating date to:', formattedDate);
-
-            // Step 2: Make a request with the specific date parameter
-            const response = await this.client.get(
-                `${this.siteURL}/Default.aspx`,
-                {
-                    params: {
-                        p: 'dynamicmodule',
-                        pageid: '100076',
-                        ssid: '100088',
-                        vnf: '1',
-                        Date: formattedDate
-                    }
-                }
-            );
-
-            console.log('Response received, length:', response.data.length);
-
-            // Debug: Save response
-            fs.writeFileSync('teesheet.html', response.data);
-            console.log('Saved response to teesheet.html');
-
-            // Check if we got the right page
-            if (response.data.includes('txtUsername') || response.data.includes('Login')) {
-                throw new Error('Session expired - got login page');
+                
+                // Wait before retrying
+                const retryDelay = 2000; // 2s between all attempts
+                console.log(`⏳ Retrying in ${retryDelay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
-
-            if (response.data.includes('LaunchReserver')) {
-                console.log('✅ Got tee sheet page with slots!');
-            }
-
-            return this.parseTeeSheet(response.data);
-        } catch (error) {
-            console.error('Error fetching tee sheet:', error.message);
-            throw error;
         }
     }
 
@@ -283,7 +314,7 @@ class GolfBookingService {
             while ((match = pattern.exec(decodedHtml)) !== null) {
                 const [fullMatch, courseId, date, time, tee, currentPlayers, availableSpots] = match;
 
-                if (parseInt(availableSpots) === 4) {
+                if (parseInt(availableSpots) > 0) {
                     const exists = slots.some(s => s.time === time && s.date === date);
 
                     if (!exists) {
@@ -322,7 +353,7 @@ class GolfBookingService {
                             const currentPlayers = params[4].replace(/['"]/g, '');
                             const availableSpots = params[5].replace(/['"]/g, '');
 
-                            if (parseInt(availableSpots) === 4) {
+                            if (parseInt(availableSpots) > 0) {
                                 const exists = slots.some(s => s.time === time && s.date === date);
                                 if (!exists) {
                                     slots.push({
@@ -397,10 +428,11 @@ class GolfBookingService {
         }
     }
 
-    // Make a reservation for a specific slot
-    async makeReservation(slot, guests, mainPlayerName = 'Habib, Jake') {
-        try {
-            console.log(`Making reservation for ${slot.time} on ${slot.date}`);
+    // Make a reservation for a specific slot with retry logic
+    async makeReservation(slot, guests, mainPlayerName = 'Habib, Jake', maxRetries = 10) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🎯 [Attempt ${attempt}/${maxRetries}] Making reservation for ${slot.time} on ${slot.date}`);
 
             // First, get the booking form to extract required form fields
             const bookingFormResponse = await this.client.get(
@@ -628,13 +660,35 @@ class GolfBookingService {
                     response: responseText.substring(0, 500)
                 };
             }
-        } catch (error) {
-            console.error('Reservation error:', error.message);
-            return {
-                success: false,
-                error: error.message,
-                response: error.response?.data?.substring(0, 500)
-            };
+            } catch (error) {
+                console.error(`❌ [Attempt ${attempt}/${maxRetries}] Reservation error:`, error.message);
+                
+                // Log network error details
+                if (error.code === 'ETIMEDOUT') {
+                    console.error('❌ Network timeout during booking request');
+                } else if (error.code === 'ECONNRESET' || error.message.includes('socket hang up')) {
+                    console.error('❌ Connection reset during booking request');
+                } else {
+                    console.error('❌ Booking error details:', {
+                        code: error.code,
+                        message: error.message
+                    });
+                }
+                
+                // If this is the last attempt, return the error
+                if (attempt === maxRetries) {
+                    return {
+                        success: false,
+                        error: `Booking failed after ${maxRetries} attempts: ${error.message}`,
+                        response: error.response?.data?.substring(0, 500)
+                    };
+                }
+                
+                // Wait before retrying
+                const retryDelay = 2000; // 2 seconds between booking attempts
+                console.log(`⏳ Retrying booking in ${retryDelay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
         }
     }
 
@@ -660,17 +714,67 @@ class GolfBookingService {
 
             console.log(`Time range in minutes: ${preferredTimeMin} to ${maxTimeMin}`);
 
-            const availableSlots = teeSheet.slots.filter(slot => {
-                if (!slot.canReserve || slot.availableSpots !== 4) return false;
+            // Try to find slots with priority: 4 spots > 3 spots > 2 spots > 1 spot
+            let availableSlots = [];
+            let slotsType = '';
 
+            // Priority 1: Try 4-person slots first
+            availableSlots = teeSheet.slots.filter(slot => {
+                if (!slot.canReserve || slot.availableSpots !== 4) return false;
                 const slotMin = this.timeToMinutes(slot.time);
                 const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
-
-                console.log(`Slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange ? 'IN RANGE' : 'OUT OF RANGE'}`);
+                console.log(`Slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange ? 'PERFECT MATCH' : 'OUT OF RANGE'}`);
                 return inRange;
             });
 
-            console.log(`Found ${availableSlots.length} slots in preferred time range`);
+            if (availableSlots.length > 0) {
+                slotsType = '4-person (full)';
+                console.log(`✅ Found ${availableSlots.length} perfect 4-person slots`);
+            } else {
+                // Priority 2: Try 3-person slots
+                availableSlots = teeSheet.slots.filter(slot => {
+                    if (!slot.canReserve || slot.availableSpots !== 3) return false;
+                    const slotMin = this.timeToMinutes(slot.time);
+                    const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                    console.log(`Slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange ? 'GOOD MATCH' : 'OUT OF RANGE'}`);
+                    return inRange;
+                });
+
+                if (availableSlots.length > 0) {
+                    slotsType = '3-person';
+                    console.log(`⚡ Found ${availableSlots.length} good 3-person slots`);
+                } else {
+                    // Priority 3: Try 2-person slots
+                    availableSlots = teeSheet.slots.filter(slot => {
+                        if (!slot.canReserve || slot.availableSpots !== 2) return false;
+                        const slotMin = this.timeToMinutes(slot.time);
+                        const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                        console.log(`Slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange ? 'OK MATCH' : 'OUT OF RANGE'}`);
+                        return inRange;
+                    });
+
+                    if (availableSlots.length > 0) {
+                        slotsType = '2-person';
+                        console.log(`⚠️ Found ${availableSlots.length} partial 2-person slots`);
+                    } else {
+                        // Priority 4: Try 1-person slots (last resort)
+                        availableSlots = teeSheet.slots.filter(slot => {
+                            if (!slot.canReserve || slot.availableSpots !== 1) return false;
+                            const slotMin = this.timeToMinutes(slot.time);
+                            const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                            console.log(`Slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange ? 'LAST RESORT' : 'OUT OF RANGE'}`);
+                            return inRange;
+                        });
+
+                        if (availableSlots.length > 0) {
+                            slotsType = '1-person (last resort)';
+                            console.log(`🚨 Found ${availableSlots.length} single spots (last resort)`);
+                        }
+                    }
+                }
+            }
+
+            console.log(`Found ${availableSlots.length} ${slotsType} slots in preferred time range`);
 
             if (availableSlots.length === 0) {
                 return {

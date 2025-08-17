@@ -558,14 +558,67 @@ app.post('/api/bookings/:id/trigger', authenticateToken, async (req, res) => {
 
         console.log(`Time range: ${booking.preferred_time} (${preferredTimeMin} min) to ${booking.max_time} (${maxTimeMin} min)`);
 
-        const availableSlots = teeSheet.slots.filter(slot => {
+        // Try to find slots with priority: 4 spots > 3 spots > 2 spots > 1 spot
+        let availableSlots = [];
+        let slotsType = '';
+
+        // Priority 1: Try 4-person slots first
+        availableSlots = teeSheet.slots.filter(slot => {
             const slotMin = bookingService.timeToMinutes(slot.time);
             const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
-            console.log(`Checking slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange && slot.availableSpots === 4 ? 'YES' : 'NO'}`);
-            return inRange && slot.availableSpots === 4;
+            const is4Spots = slot.availableSpots === 4;
+            console.log(`Checking slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange && is4Spots ? 'PERFECT MATCH' : 'NO'}`);
+            return inRange && is4Spots;
         });
 
-        console.log(`Found ${availableSlots.length} slots in preferred time range`);
+        if (availableSlots.length > 0) {
+            slotsType = '4-person (full)';
+            console.log(`✅ Found ${availableSlots.length} perfect 4-person slots`);
+        } else {
+            // Priority 2: Try 3-person slots
+            availableSlots = teeSheet.slots.filter(slot => {
+                const slotMin = bookingService.timeToMinutes(slot.time);
+                const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                const is3Spots = slot.availableSpots === 3;
+                console.log(`Checking slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange && is3Spots ? 'GOOD MATCH' : 'NO'}`);
+                return inRange && is3Spots;
+            });
+
+            if (availableSlots.length > 0) {
+                slotsType = '3-person';
+                console.log(`⚡ Found ${availableSlots.length} good 3-person slots`);
+            } else {
+                // Priority 3: Try 2-person slots
+                availableSlots = teeSheet.slots.filter(slot => {
+                    const slotMin = bookingService.timeToMinutes(slot.time);
+                    const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                    const is2Spots = slot.availableSpots === 2;
+                    console.log(`Checking slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange && is2Spots ? 'OK MATCH' : 'NO'}`);
+                    return inRange && is2Spots;
+                });
+
+                if (availableSlots.length > 0) {
+                    slotsType = '2-person';
+                    console.log(`⚠️ Found ${availableSlots.length} partial 2-person slots`);
+                } else {
+                    // Priority 4: Try 1-person slots (last resort)
+                    availableSlots = teeSheet.slots.filter(slot => {
+                        const slotMin = bookingService.timeToMinutes(slot.time);
+                        const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                        const is1Spot = slot.availableSpots === 1;
+                        console.log(`Checking slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange && is1Spot ? 'LAST RESORT' : 'NO'}`);
+                        return inRange && is1Spot;
+                    });
+
+                    if (availableSlots.length > 0) {
+                        slotsType = '1-person (last resort)';
+                        console.log(`🚨 Found ${availableSlots.length} single spots (last resort)`);
+                    }
+                }
+            }
+        }
+
+        console.log(`Found ${availableSlots.length} ${slotsType} slots in preferred time range`);
 
         if (availableSlots.length === 0) {
             return res.json({
@@ -659,7 +712,7 @@ app.get('/api/view/teesheet', async (req, res) => {
             }
         }
 
-        const availableSlots = launchReserverCalls.filter(slot => slot.availableSpots === 4);
+        const availableSlots = launchReserverCalls.filter(slot => slot.availableSpots > 0);
 
         const titleMatch = decodedHtml.match(/<title>(.*?)<\/title>/i);
         const pageTitle = titleMatch ? titleMatch[1] : 'No title';
