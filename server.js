@@ -561,8 +561,8 @@ app.post('/api/bookings/:id/trigger', authenticateToken, async (req, res) => {
         const availableSlots = teeSheet.slots.filter(slot => {
             const slotMin = bookingService.timeToMinutes(slot.time);
             const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
-            console.log(`Checking slot ${slot.time} (${slotMin} min): ${inRange ? 'YES' : 'NO'}`);
-            return inRange && slot.availableSpots > 0;
+            console.log(`Checking slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange && slot.availableSpots === 4 ? 'YES' : 'NO'}`);
+            return inRange && slot.availableSpots === 4;
         });
 
         console.log(`Found ${availableSlots.length} slots in preferred time range`);
@@ -659,7 +659,7 @@ app.get('/api/view/teesheet', async (req, res) => {
             }
         }
 
-        const availableSlots = launchReserverCalls.filter(slot => slot.availableSpots > 0);
+        const availableSlots = launchReserverCalls.filter(slot => slot.availableSpots === 4);
 
         const titleMatch = decodedHtml.match(/<title>(.*?)<\/title>/i);
         const pageTitle = titleMatch ? titleMatch[1] : 'No title';

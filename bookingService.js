@@ -283,7 +283,7 @@ class GolfBookingService {
             while ((match = pattern.exec(decodedHtml)) !== null) {
                 const [fullMatch, courseId, date, time, tee, currentPlayers, availableSpots] = match;
 
-                if (parseInt(availableSpots) > 0) {
+                if (parseInt(availableSpots) === 4) {
                     const exists = slots.some(s => s.time === time && s.date === date);
 
                     if (!exists) {
@@ -322,7 +322,7 @@ class GolfBookingService {
                             const currentPlayers = params[4].replace(/['"]/g, '');
                             const availableSpots = params[5].replace(/['"]/g, '');
 
-                            if (parseInt(availableSpots) > 0) {
+                            if (parseInt(availableSpots) === 4) {
                                 const exists = slots.some(s => s.time === time && s.date === date);
                                 if (!exists) {
                                     slots.push({
@@ -661,12 +661,12 @@ class GolfBookingService {
             console.log(`Time range in minutes: ${preferredTimeMin} to ${maxTimeMin}`);
 
             const availableSlots = teeSheet.slots.filter(slot => {
-                if (!slot.canReserve || slot.availableSpots === 0) return false;
+                if (!slot.canReserve || slot.availableSpots !== 4) return false;
 
                 const slotMin = this.timeToMinutes(slot.time);
                 const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
 
-                console.log(`Slot ${slot.time} (${slotMin} min): ${inRange ? 'IN RANGE' : 'OUT OF RANGE'}`);
+                console.log(`Slot ${slot.time} (${slotMin} min, ${slot.availableSpots}/4 spots): ${inRange ? 'IN RANGE' : 'OUT OF RANGE'}`);
                 return inRange;
             });
 
