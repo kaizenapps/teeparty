@@ -1,38 +1,38 @@
 # ⛳ Golf Tee Time Automation System
 
-An intelligent automated booking system for Trump National Colts Neck golf course that handles both manual scheduling and weekend auto-booking with smart retry logic and real-time status tracking.
+An intelligent automated booking system for Trump National Colts Neck golf course that handles both manual scheduling and weekend auto-booking with smart retry logic, fallback slot selection, and real-time status tracking.
 
-## 🌟 Features
+## 🌟 Key Features
 
-### 🤖 Automated Booking
+### 🤖 Intelligent Booking Engine
+- **Multi-Slot Priority**: Books 4-person slots first, then falls back to 3→2→1 person slots
+- **Smart Date Handling**: Robust timezone-aware date processing prevents booking wrong dates
+- **Retry Logic**: 10 attempts with 2-second delays for network resilience
+- **Cache-Busting**: Ensures fresh tee sheet data with timestamp parameters
+- **Success Validation**: Verifies bookings with dynamic date matching
+
+### ⚡ Automated Systems
 - **Precise Timing**: Books slots exactly when they open (7 days in advance at 6:30 AM EDT)
 - **Weekend Auto-Booking**: Automatically reserves every Saturday and Sunday
-- **Smart Retry Logic**: Won't retry if no slots available in preferred time range
-- **4-Weekend Limit**: Maintains maximum of 4 future weekends booked
+- **Manual Bookings**: Schedule for any specific date with custom time preferences
+- **Catch-up Mode**: Books already-open weekends when system is re-enabled
+- **4-Weekend Limit**: Maintains maximum of 4 future weekend bookings
 
-### 🛡️ Intelligent Authentication
-- **RC4 Encryption**: Secure credential storage
-- **Session Management**: Automatic re-authentication when needed
-- **Two-Step Login**: Token exchange with session persistence
+### 🛡️ Enterprise-Grade Reliability
+- **Graceful Shutdown**: Proper SIGTERM/SIGINT handling and database connection cleanup
+- **Database Resilience**: Auto-retry database connections instead of crashing
+- **Error Recovery**: Handles uncaught exceptions and unhandled promise rejections
+- **Session Management**: Automatic re-authentication when sessions expire
+- **Async File Operations**: Non-blocking debug file saves with error handling
 
-### 👥 Guest Management
-- **Pre-configured Guest List**: Avoids member billing charges
-- **Automatic Guest Assignment**: Smart guest selection for bookings
-
-### 📊 Real-time Dashboard
-- **React-based UI**: Modern interface with Tailwind CSS
-- **Auto-refresh**: Live status updates every 30 seconds
-- **Color-coded Status**: Visual indicators for booking states
+### 📊 Modern Dashboard
+- **React-based UI**: Clean interface with Tailwind CSS
+- **Real-time Updates**: Live status tracking every 30 seconds
 - **Three-tab Layout**: Manual Bookings, Weekend Auto-Booking, Settings
-- **Booking History**: Complete activity logs
+- **Detailed Logging**: Complete booking attempt history with timestamps
+- **Debug Tools**: Built-in tee sheet viewer and slot parsing diagnostics
 
-### ⏰ Smart Scheduling
-- **Manual Bookings**: Schedule for any date with custom time preferences
-- **Weekend Automation**: Fixed 7:50 AM - 1:00 PM time range
-- **Immediate Catch-up**: Books already-open weekends when enabled
-- **30-Minute Checks**: Regular monitoring for booking opportunities
-
-## 🚀 Quick Start with Docker (Recommended)
+## 🚀 Quick Start with Docker
 
 ### Prerequisites
 - Docker and Docker Compose
@@ -57,16 +57,12 @@ DB_NAME=golf_booking
 PORT=3001
 NODE_ENV=production
 
-# Golf Site Configuration
-GOLF_SITE_URL=https://www.trumpcoltsneck.com
-COURSE_ID=95
-
 # Time Zone (Critical for booking accuracy)
 TZ=America/New_York
 
-# Admin Credentials (Optional)
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your_admin_password
+# Golf Site Configuration
+GOLF_SITE_URL=https://www.trumpcoltsneck.com
+COURSE_ID=95
 ```
 
 ### 3. Deploy
@@ -79,382 +75,248 @@ docker-compose ps
 docker-compose logs -f app
 ```
 
-### 4. Access Application
-Open http://localhost:3001
-
-### 5. Initial Configuration
-1. Navigate to **Settings** tab
-2. Enter your golf club credentials
-3. Click "Update & Verify Credentials"
-4. Go to **Weekend Auto-Booking** tab and enable if desired
+### 4. Access & Configure
+1. Open http://localhost:3001
+2. Navigate to **Settings** tab
+3. Enter your golf club credentials
+4. Enable **Weekend Auto-Booking** if desired
 
 ## 📦 Docker Services
 
-### Application Stack
-- **MySQL 8.0**: Database with persistent storage
-- **Node.js App**: Backend API and React frontend
+### Service Architecture
+- **MySQL 8.0**: Database with persistent storage and health checks
+- **Node.js App**: Backend API and React frontend with graceful shutdown
 - **Persistent Volume**: `dbdata` preserves all data between deployments
-
-### Service Health Checks
-- **Database**: `mysqladmin ping` every 10 seconds
-- **Application**: HTTP health check every 30 seconds
 
 ### Container Management
 ```bash
 # Start services
 docker-compose up -d
 
-# View logs
-docker-compose logs -f
-docker-compose logs app
-docker-compose logs db
+# View logs (real-time)
+docker-compose logs -f app
 
-# Stop services
+# Graceful shutdown
 docker-compose down
 
-# Rebuild after code changes
+# Rebuild after updates
 docker-compose up --build -d
 
 # Check service health
 docker-compose ps
 ```
 
-## 💾 Database Backup & Restore
+## 💾 Database Management
 
-### Quick Backup
+### Automated Backup
 ```bash
 # Create timestamped backup
 docker-compose exec db mysqladump -u root -p${DB_PASSWORD} ${DB_NAME} > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Simple backup
-docker-compose exec db mysqladump -u root -p golf_booking > golf_backup.sql
-```
-
-### Backup with Docker Run (Alternative)
-```bash
-# If containers are not running
-docker run --rm --network tee_default mysql:8.0 mysqldump -h db -u root -p[password] golf_booking > backup.sql
 ```
 
 ### Restore Database
 ```bash
-# Restore from backup file
+# Restore from backup
 docker-compose exec -T db mysql -u root -p${DB_PASSWORD} ${DB_NAME} < backup_file.sql
-
-# Interactive restore
-cat backup_file.sql | docker-compose exec -T db mysql -u root -p${DB_PASSWORD} ${DB_NAME}
 ```
 
-### Automated Backup Script
-Create `backup.sh`:
-```bash
-#!/bin/bash
-BACKUP_DIR="./backups"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/golf_backup_${TIMESTAMP}.sql"
-
-mkdir -p ${BACKUP_DIR}
-docker-compose exec db mysqladump -u root -p${DB_PASSWORD} ${DB_NAME} > ${BACKUP_FILE}
-echo "Backup created: ${BACKUP_FILE}"
-
-# Keep only last 7 backups
-ls -t ${BACKUP_DIR}/golf_backup_*.sql | tail -n +8 | xargs -d '\n' rm -f
-```
-
-## 🔧 Manual Installation (Alternative)
+## 🔧 Manual Installation
 
 ### Prerequisites
 - Node.js (v18 or higher)
 - MySQL 8.0+
-- npm or yarn
 
-### Installation Steps
+### Setup Steps
 ```bash
-# 1. Clone repository
-git clone <repository-url>
-cd tee
-
-# 2. Install dependencies
+# Install dependencies
 npm install
 
-# 3. Create database
-mysql -u root -p
-CREATE DATABASE golf_booking;
-```
-
-### Database Schema Setup
-```sql
--- Run the complete schema from the Docker section
--- Or import from a backup file
-mysql -u root -p golf_booking < schema.sql
-```
-
-### Environment Setup
-Create `.env` file with `DB_HOST=localhost` instead of `db`.
-
-### Build and Run
-```bash
-# Development mode
-npm run dev
-
-# Production mode
+# Build frontend
 npm run build
+
+# Start production server
 npm start
 ```
 
+Set `DB_HOST=localhost` in `.env` for manual installation.
+
 ## 📱 Usage Guide
 
-### Manual Booking Workflow
+### Manual Booking Process
 1. **Settings Tab**: Configure golf club credentials
-2. **Manual Bookings Tab**:
-   - Select date (weekend filter available)
-   - Set preferred time (e.g., 7:54 AM)
-   - Set maximum acceptable time (e.g., 1:00 PM)
-   - Click "Add Booking"
-3. **Automatic Execution**: System books when window opens
+2. **Manual Bookings Tab**: Select date, set time preferences, click "Add Booking"
+3. **Automatic Execution**: System books when the 7-day window opens
 
 ### Weekend Auto-Booking
-1. **Enable**: Click "Enable" in Weekend Auto-Booking tab
-2. **Immediate Action**: System checks all currently open weekends
-3. **Ongoing Monitoring**: 
-   - Checks every 30 minutes for new opportunities
-   - Books at 6:30 AM EDT on Sat/Sun for 7 days ahead
-   - Maintains 4-weekend maximum
+1. **Enable**: Toggle weekend automation in the dedicated tab
+2. **Immediate Action**: Books all currently available weekends
+3. **Ongoing**: Monitors every 30 minutes, books at 6:30 AM EDT on weekends
 
-### Status Reference
-| Status | Meaning | Action |
-|--------|---------|--------|
-| 🟢 **Booking window OPEN** | Can be booked now | System attempting |
-| 🔄 **Checking for Slots** | Searching available times | In progress |
-| ❌ **No Slots Available** | No times in range | Will retry when window opens |
-| ⏳ **Scheduled** | Waiting for window | Will auto-book |
-| ✅ **Booked** | Successfully reserved | Complete |
-| ⏸️ **Manual Only** | Auto-booking disabled | User action needed |
+### Booking Status Guide
+| Status | Meaning | System Action |
+|--------|---------|---------------|
+| ⏳ **Scheduled** | Waiting for booking window | Will auto-book when opens |
+| 🔄 **Checking** | Searching for available slots | Trying fallback priorities |
+| ✅ **Booked** | Successfully reserved | Complete - check golf site |
+| ❌ **No Slots** | No times in preferred range | Will retry when window opens |
+| 🟡 **Partial** | Booked non-4-person slot | Check if acceptable |
 
 ## 🔌 API Reference
 
-### Authentication & Settings
+### Core Endpoints
 ```http
+# Settings & Authentication
 GET    /api/settings                 # Get user settings
-POST   /api/settings/credentials     # Update credentials
-```
+POST   /api/settings/credentials     # Update and verify credentials
 
-### Booking Management
-```http
+# Booking Management
 GET    /api/bookings                 # List all bookings
 POST   /api/bookings                 # Create manual booking
 DELETE /api/bookings/:id             # Remove booking
 POST   /api/bookings/:id/trigger     # Manual trigger
-```
 
-### Weekend Automation
-```http
+# Weekend Automation
 GET    /api/weekend-settings         # Get weekend config
 POST   /api/weekend-settings         # Toggle weekend booking
 GET    /api/upcoming-weekends        # Weekend schedule
 GET    /api/weekend-history          # Booking history
-```
 
-### Debug & Monitoring
-```http
-GET    /api/health                   # Health check
-GET    /api/view/teesheet           # Parsed tee sheet
-GET    /api/debug/slots             # Slot parsing debug
+# Monitoring & Debug
+GET    /api/health                   # System health check
+GET    /api/view/teesheet           # Live parsed tee sheet
+GET    /api/debug/slots             # Slot parsing debug info
 ```
 
 ## 🗄️ Database Schema
 
 ### Core Tables
 - **`user_settings`**: Encrypted credentials and session data
-- **`booking_preferences`**: Scheduled booking requests
-- **`booking_logs`**: Detailed attempt history
-- **`guest_list`**: Pre-configured guest roster
+- **`booking_preferences`**: Manual booking requests with status tracking
+- **`booking_logs`**: Detailed attempt history with full response data
+- **`guest_list`**: Pre-configured guest roster to avoid member billing
 - **`weekend_auto_settings`**: Weekend automation configuration
-- **`weekend_booking_history`**: Weekend booking tracking
-
-### Key Relationships
-```
-user_settings (1) ─── (n) booking_preferences
-booking_preferences (1) ─── (n) booking_logs
-user_settings (1) ─── (1) weekend_auto_settings
-```
+- **`weekend_booking_history`**: Complete weekend booking tracking
 
 ## 🔍 Troubleshooting
 
-### Docker Issues
-```bash
-# Container unhealthy
-docker-compose logs app
-docker-compose logs db
+### Common Issues
 
-# Database connection issues
-docker-compose exec db mysql -u root -p${DB_PASSWORD} ${DB_NAME}
+**"Date mismatch" or wrong date booking**
+- Fixed: System now handles timezone conversions properly
+- All dates processed in local timezone (EDT/EST)
 
-# Volume issues
-docker volume ls
-docker volume inspect tee_dbdata
+**"No slots available" repeatedly**
+- Normal if preferred times (7:50 AM - 1:00 PM for weekends) are fully booked
+- System tries 4→3→2→1 person slot fallback automatically
+- Manual bookings allow wider time ranges
 
-# Complete reset (⚠️ destroys data)
-docker-compose down -v
-docker-compose up --build -d
-```
-
-### Application Issues
-
-**"No slots available"**
-- Normal if all preferred times (7:50 AM - 1:00 PM) are booked
-- Manual booking allows afternoon slots
-
-**"Authentication failed"**
-- Verify credentials in Settings tab
-- Ensure golf club account is active
-- Check for website changes
+**Authentication failures**
+- Verify credentials in Settings tab with "Update & Verify" button
+- Check that golf club account is active and not locked
+- Clear browser cache if web interface issues
 
 **Weekend booking not working**
-- Confirm weekend auto-booking is enabled
-- Verify not at 4-weekend limit
-- Check booking window is actually open (weekends only open 7 days ahead)
-
-**Incorrect times displayed**
-- Ensure server timezone is `America/New_York`
-- Verify `TZ=America/New_York` in `.env`
-- All times operate in EDT/EST
+- Ensure weekend auto-booking is enabled
+- Check not at 4-weekend limit (view in weekend tab)
+- Verify booking window is open (weekends only bookable 7 days ahead)
 
 ### Debug Tools
 ```bash
-# View parsed tee sheet
+# Monitor system in real-time
+docker-compose logs -f app
+
+# View current tee sheet parsing
 curl http://localhost:3001/api/view/teesheet
 
 # Check system health
 curl http://localhost:3001/api/health
 
-# Monitor logs in real-time
-docker-compose logs -f app
-
 # Database direct access
 docker-compose exec db mysql -u root -p${DB_PASSWORD} ${DB_NAME}
 ```
 
+### Advanced Debugging
+```bash
+# Complete reset (⚠️ destroys all data)
+docker-compose down -v
+docker-compose up --build -d
+
+# Container health diagnostics
+docker-compose ps
+docker inspect <container_id>
+```
+
 ## 📊 System Architecture
 
-### Booking Timeline
-```
-Today (Thursday) 6:30 AM EDT
-    ↓
-Saturday: Books next Saturday (7 days ahead)
-Sunday: Books next Sunday (7 days ahead)
-    ↓
-Every 30 minutes: Monitors for booking opportunities
-    ↓
-Maintains maximum 4 future weekends
-```
+### Booking Intelligence
+1. **Dynamic Slot Priority**: Tries 4-person slots first, falls back intelligently
+2. **Network Resilience**: 10 retry attempts with exponential backoff
+3. **Cache Prevention**: Timestamp-based parameters ensure fresh data
+4. **Date Validation**: Confirms server returns correct date before parsing
+5. **Success Detection**: Dynamic day-of-week matching for booking confirmation
 
-### Authentication Flow
-1. **RC4 Encryption** of stored credentials
-2. **Two-step Login** with token exchange
-3. **Session Management** with cookie persistence
-4. **Auto Re-authentication** when sessions expire
+### Authentication & Security
+- **RC4 Encryption**: Credential storage (required for golf site compatibility)
+- **Session Persistence**: Cookie-based authentication with auto-renewal
+- **Prepared Statements**: SQL injection prevention
+- **Graceful Error Handling**: No sensitive data in logs
 
-### Booking Process
-1. **Fetch Tee Sheet**: Retrieve available slots via HTTP
-2. **Parse HTML**: Extract time slots using regex/cheerio
-3. **Filter by Preferences**: Match user's time requirements
-4. **Guest Assignment**: Select appropriate guest to avoid billing
-5. **Submit Booking**: Execute reservation request
-6. **Update Database**: Record results and status
+### Performance Features
+- **Async Operations**: Non-blocking file I/O and database operations
+- **Connection Pooling**: Efficient database resource management
+- **Memory Management**: Proper timer cleanup and graceful shutdown
+- **Resource Monitoring**: Health checks and automatic recovery
 
-## 🔒 Security Features
+## 🔒 Security & Compliance
 
-- **Encrypted Storage**: All passwords RC4 encrypted in database
-- **Secure Sessions**: Token-based authentication
-- **No Credential Logging**: Sensitive data excluded from logs
-- **Environment Variables**: Configuration via secure env files
-- **Database Security**: Prepared statements prevent SQL injection
+### Built-in Security
+- **Encrypted Password Storage**: RC4 encryption for golf site credentials
+- **Secure Session Management**: Token-based authentication with expiration
+- **Input Validation**: All API inputs validated and sanitized
+- **Error Sanitization**: Sensitive information excluded from client responses
 
-## 📈 Performance & Monitoring
+### Production Safeguards
+- **Graceful Shutdown**: SIGTERM/SIGINT handlers prevent data corruption
+- **Database Resilience**: Connection retry logic prevents crashes
+- **Exception Handling**: Uncaught exceptions and promise rejections handled
+- **Resource Cleanup**: Proper connection and timer cleanup on shutdown
+
+## 📈 Monitoring & Performance
+
+### Key Metrics
+- **Booking Success Rate**: Track via `booking_logs` table
+- **System Health**: `/api/health` endpoint for uptime monitoring
+- **Database Performance**: Connection status and query timing
+- **Authentication Status**: Login attempt monitoring
 
 ### Resource Usage
-- **Memory**: ~100MB typical usage
-- **CPU**: Minimal during idle, spikes during booking attempts
-- **Network**: Golf site requests only during active booking
-- **Storage**: Database grows ~1MB per month with typical usage
-
-### Monitoring Points
-- **Health Endpoint**: `/api/health` for uptime monitoring
-- **Database Health**: Connection status and query performance
-- **Booking Success Rate**: Track via weekend_booking_history table
-- **Authentication Status**: Monitor login failures
-
-## 🚦 System Limits & Behaviors
-
-### Operational Limits
-- **Weekend Maximum**: 4 future weekends at any time
-- **Time Range**: Weekend bookings fixed to 7:50 AM - 1:00 PM
-- **No Time Expansion**: Won't book outside preferred range
-- **Rate Limiting**: Respects golf site server load
-
-### Important Behaviors
-- **Immediate Catch-up**: Books open weekends when enabled
-- **No Retry on No Slots**: Saves resources when nothing available
-- **Guest Rotation**: Automatically assigns different guests
-- **Session Recovery**: Handles authentication expiration gracefully
+- **Memory**: ~150MB typical usage
+- **CPU**: Minimal idle, spikes during booking windows
+- **Storage**: Database grows ~1MB monthly with typical usage
+- **Network**: Golf site requests only during active booking periods
 
 ## 📄 Project Information
 
-**Version**: 2.0.0  
+**Version**: 2.1.0  
 **Status**: Production Ready  
+**Updated**: August 2025  
 **License**: Private Use Only  
-**Last Updated**: August 2025  
 
 ### Technology Stack
 - **Frontend**: React 18, Tailwind CSS, Vite
-- **Backend**: Node.js, Express.js
-- **Database**: MySQL 8.0
-- **Deployment**: Docker, Docker Compose
-- **Automation**: node-cron, axios with cookie support
+- **Backend**: Node.js, Express.js with graceful shutdown
+- **Database**: MySQL 8.0 with connection pooling
+- **Deployment**: Docker Compose with health checks
+- **Automation**: node-cron, axios with cookie persistence
 
-### Repository Structure
-```
-tee/
-├── src/                    # React frontend source
-├── public/                 # Static assets
-├── server.js              # Express backend
-├── bookingService.js      # Core booking logic
-├── weekendAutomation.js   # Weekend automation
-├── docker-compose.yml     # Docker services
-├── Dockerfile            # Application container
-├── package.json          # Dependencies
-└── README.md            # This file
-```
-
-## 🤝 Support & Contributing
-
-### Getting Help
-1. Check this README thoroughly
-2. Review troubleshooting section
-3. Use debug endpoints for diagnostics
-4. Check container logs for errors
-5. Verify database state directly
-
-### Development
-```bash
-# Development environment
-npm run dev
-
-# Frontend only (port 5173)
-npm run dev:frontend
-
-# Backend only (port 3001)
-npm run dev:backend
-```
-
-### Contributing Guidelines
-- Maintain existing code style
-- Update documentation for changes
-- Test with both manual and weekend booking modes
-- Verify Docker deployment works
-- Consider timezone implications for any time-related changes
+### Recent Improvements (v2.1.0)
+- ✅ Fixed timezone conversion issues causing wrong date bookings
+- ✅ Added intelligent slot fallback (4→3→2→1 person priority)
+- ✅ Implemented retry logic with network resilience
+- ✅ Enhanced booking success detection with dynamic date matching
+- ✅ Added graceful shutdown and database connection retry
+- ✅ Improved error handling and async file operations
 
 ---
 
-⚠️ **Important**: This system interfaces with Trump National Colts Neck's booking system. Use responsibly and respect the golf club's terms of service. All booking times are in EDT/EST timezone.
+⚠️ **Important**: This system interfaces with Trump National Colts Neck's booking system. Use responsibly and respect the golf club's terms of service. All operations are performed in EDT/EST timezone.

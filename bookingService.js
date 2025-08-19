@@ -157,11 +157,12 @@ class GolfBookingService {
 
     // Get tee sheet for a specific date with retry logic
     async getTeeSheet(date, maxRetries = 10) {
-        // Ensure date is valid
+        // Ensure date is valid and handle timezone issues
         if (typeof date === 'string') {
             if (date.includes('GMT')) {
                 date = new Date(date);
             } else if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                // Use noon local time to avoid timezone issues
                 date = new Date(date + 'T12:00:00');
             } else {
                 date = new Date(date);
@@ -172,13 +173,20 @@ class GolfBookingService {
             throw new Error(`Invalid date: ${date}`);
         }
 
+        // Use local date components to avoid timezone conversion issues
         const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+        
+        // Also create an alternative format in case the server expects different formatting
+        const paddedDate = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`📡 [Attempt ${attempt}/${maxRetries}] Fetching tee sheet for: ${formattedDate}`);
+                // Try both date formats in case server expects different formatting
+                const dateToTry = attempt <= 5 ? formattedDate : paddedDate;
+                console.log(`📡 [Attempt ${attempt}/${maxRetries}] Fetching tee sheet for: ${dateToTry}`);
 
                 // Step 1: Load the initial booking page to get the form data
+                const cacheBuster = Date.now() + Math.floor(Math.random() * 1000);
                 const initialResponse = await this.client.get(
                     `${this.siteURL}/Default.aspx`,
                     {
@@ -186,14 +194,21 @@ class GolfBookingService {
                             p: 'dynamicmodule',
                             pageid: '100076',
                             ssid: '100088',
-                            vnf: '1'
+                            vnf: '1',
+                            _: cacheBuster
+                        },
+                        headers: {
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache',
+                            'Expires': '0'
                         }
                     }
                 );
 
-                console.log('Initial page loaded, now updating date to:', formattedDate);
+                console.log('Initial page loaded, now updating date to:', dateToTry);
 
                 // Step 2: Make a request with the specific date parameter
+                const cacheBuster2 = Date.now() + Math.floor(Math.random() * 1000);
                 const response = await this.client.get(
                     `${this.siteURL}/Default.aspx`,
                     {
@@ -202,16 +217,59 @@ class GolfBookingService {
                             pageid: '100076',
                             ssid: '100088',
                             vnf: '1',
-                            Date: formattedDate
+                            Date: dateToTry,
+                            _: cacheBuster2
+                        },
+                        headers: {
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache',
+                            'Expires': '0'
                         }
                     }
                 );
 
                 console.log('Response received, length:', response.data.length);
 
-                // Debug: Save response
-                fs.writeFileSync('teesheet.html', response.data);
-                console.log('Saved response to teesheet.html');
+                // Debug: Save response (async with error handling)
+                try {
+                    await fs.promises.writeFile('teesheet.html', response.data);
+                    console.log('Saved response to teesheet.html');
+                } catch (writeError) {
+                    console.warn('Could not save debug file:', writeError.message);
+                }
+
+                // Validate that we got the correct date in the response
+                const $ = cheerio.load(response.data);
+                const dateText = response.data;
+                
+                // Create expected date formats to match against
+                const expectedDate = new Date(dateToTry);
+                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                
+                const expectedDayName = dayNames[expectedDate.getDay()];
+                const expectedMonthName = monthNames[expectedDate.getMonth()];
+                const expectedDateNum = expectedDate.getDate();
+                const expectedYear = expectedDate.getFullYear();
+                
+                const expectedDateString = `${expectedDayName}, ${expectedMonthName} ${expectedDateNum}, ${expectedYear}`;
+                
+                console.log(`Expected date string: ${expectedDateString}`);
+                
+                // Check if the response contains the expected date
+                if (!dateText.includes(expectedDateString)) {
+                    console.log(`⚠️ Date mismatch! Expected "${expectedDateString}" but got different date in response`);
+                    
+                    // If this is not the last attempt and we haven't tried the padded format yet, continue
+                    if (attempt < maxRetries) {
+                        console.log('Trying next attempt with different formatting...');
+                        continue;
+                    } else {
+                        throw new Error(`Date mismatch: Expected ${expectedDateString} but server returned different date`);
+                    }
+                }
+                
+                console.log(`✅ Date validation passed: ${expectedDateString}`);
 
                 // Check if we got the right page
                 if (response.data.includes('txtUsername') || response.data.includes('Login')) {
@@ -619,9 +677,13 @@ class GolfBookingService {
             const responseText = response.data;
             console.log('Reservation response received, length:', responseText.length);
             
-            // Save response for debugging
-            fs.writeFileSync('booking_response.html', responseText);
-            console.log('🔍 DEBUG: Saved booking response to booking_response.html');
+            // Save response for debugging (async with error handling)
+            try {
+                await fs.promises.writeFile('booking_response.html', responseText);
+                console.log('🔍 DEBUG: Saved booking response to booking_response.html');
+            } catch (writeError) {
+                console.warn('Could not save debug file:', writeError.message);
+            }
 
             // Parse actual booked time from response
             let actualBookedTime = slot.time; // Default to what we requested
@@ -635,8 +697,20 @@ class GolfBookingService {
                 // For now, just log them - we'll need to analyze the response structure
             }
 
-            if (responseText.includes('successfully') || responseText.includes('confirmed') || responseText.includes('Confirmation')) {
-                console.log(`✅ Booking confirmed! Requested: ${slot.time}, Checking actual booked time...`);
+            // Create expected date string for the booking date
+            const bookingDate = new Date(slot.date);
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            
+            const expectedDayName = dayNames[bookingDate.getDay()];
+            const expectedMonthName = monthNames[bookingDate.getMonth()];
+            const expectedDateNum = bookingDate.getDate();
+            
+            const expectedDateString = `${expectedDayName}, ${expectedMonthName} ${expectedDateNum}`;
+            console.log(`🔍 DEBUG: Looking for confirmation with date: "${expectedDateString}" and time: "${slot.time}"`);
+
+            if (responseText.includes('RESERVATION CONFIRMATION') && responseText.includes(expectedDateString) && responseText.includes(slot.time)) {
+                console.log(`✅ Booking confirmed! Requested: ${slot.time}, Date: ${expectedDateString}`);
                 return {
                     success: true,
                     message: 'Booking confirmed!',

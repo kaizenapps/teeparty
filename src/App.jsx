@@ -378,7 +378,7 @@ const App = () => {
             const data = await response.json();
 
             if (data.success) {
-                setMessage(`✅ Booking successful! Time: ${data.slot}`);
+                setMessage(`✅ Booking successful! Time: ${data.slot?.time || 'Unknown'}`);
             } else {
                 setMessage(`❌ Booking failed: ${data.message || data.error}`);
             }

@@ -60,7 +60,8 @@ const dbConfig = {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'golf_booking',
-    timezone: '+00:00',
+    // Removed timezone: '+00:00' to prevent date conversion issues
+    // Dates will now be handled in local timezone
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -82,7 +83,11 @@ async function initDB() {
         console.log('⛳ Weekend Automation initialized');
     } catch (error) {
         console.error('❌ Database connection failed:', error.message);
-        process.exit(1);
+        console.log('Retrying database connection in 5 seconds...');
+        setTimeout(() => {
+            initDB();
+        }, 5000);
+        return;
     }
 }
 
@@ -142,6 +147,7 @@ async function processBooking(booking, userSettings) {
         } else {
             bookingDate = new Date(booking.date);
         }
+        
 
         // Try to book
         const result = await bookingService.findAndBookBestSlot(
@@ -416,24 +422,26 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
         }
 
         // Calculate when booking opens (1 week prior at 6:30 AM Eastern)
+        // Ensure we use noon local time to avoid timezone conversion issues
         const bookingDate = new Date(date + 'T12:00:00');
         const opensAt = new Date(bookingDate);
         opensAt.setDate(opensAt.getDate() - 7);
         opensAt.setHours(6, 30, 0, 0);
 
-        // Check for duplicate
+        // Check for duplicate using the processed booking date
         const [existing] = await pool.query(
             'SELECT id FROM booking_preferences WHERE user_id = 1 AND date = ?',
-            [date]
+            [bookingDate]
         );
 
         if (existing.length > 0) {
             return res.status(400).json({ error: 'Booking already exists for this date' });
         }
 
+        // Store the processed date object (with proper timezone) instead of the raw string
         const [result] = await pool.query(
             'INSERT INTO booking_preferences (user_id, date, preferred_time, max_time, booking_opens_at, status, booking_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [1, date, preferredTime || '07:54:00', maxTime || '13:00:00', opensAt, 'pending', 'manual']
+            [1, bookingDate, preferredTime || '07:54:00', maxTime || '13:00:00', opensAt, 'pending', 'manual']
         );
 
         await logBookingAttempt(result.insertId, 'created', 'info', `Manual booking scheduled for ${date}`);
@@ -1101,4 +1109,46 @@ Debug URLs:
 - Health Check: http://localhost:${PORT}/api/health
 - Weekend History: http://localhost:${PORT}/api/weekend-history
   `);
+});
+
+// Graceful shutdown handling
+let shutdownInProgress = false;
+
+async function gracefulShutdown(signal) {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    
+    console.log(`\n🛑 Received ${signal}, starting graceful shutdown...`);
+    
+    try {
+        if (server) {
+            console.log('🔌 Closing HTTP server...');
+            server.close(() => {
+                console.log('✅ HTTP server closed');
+            });
+        }
+        
+        if (pool) {
+            console.log('🗄️ Closing database connections...');
+            await pool.end();
+            console.log('✅ Database connections closed');
+        }
+        
+        console.log('✅ Graceful shutdown completed');
+        process.exit(0);
+    } catch (error) {
+        console.error('❌ Error during shutdown:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('unhandledRejection');
 });
