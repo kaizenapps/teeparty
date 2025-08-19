@@ -16,7 +16,7 @@ dist-ssr
 
 teesheet.html
 schema.sql
-
+booking_response.html
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
