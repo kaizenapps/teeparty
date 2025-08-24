@@ -506,6 +506,34 @@ app.post('/api/bookings/:id/trigger', authenticateToken, async (req, res) => {
         }
 
         const booking = bookings[0];
+        
+        // Check if booking is already being processed
+        if (booking.status === 'processing') {
+            return res.status(409).json({ 
+                error: 'Booking is already being processed by another request',
+                status: 'processing'
+            });
+        }
+        
+        // Lock the booking by setting it to processing
+        await pool.query(
+            'UPDATE booking_preferences SET status = ?, last_attempt = NOW() WHERE id = ? AND status = ?',
+            ['processing', booking.id, 'pending']
+        );
+        
+        // Verify we got the lock (in case another process grabbed it first)
+        const [lockedBooking] = await pool.query(
+            'SELECT status FROM booking_preferences WHERE id = ?',
+            [booking.id]
+        );
+        
+        if (lockedBooking[0].status !== 'processing') {
+            return res.status(409).json({ 
+                error: 'Another process is already handling this booking',
+                status: lockedBooking[0].status
+            });
+        }
+        
         const [userSettings] = await pool.query('SELECT * FROM user_settings WHERE id = 1');
 
         if (!userSettings[0]?.username) {
@@ -661,8 +689,8 @@ app.post('/api/bookings/:id/trigger', authenticateToken, async (req, res) => {
                 `Successfully booked: ${targetSlot.time}`, result);
         } else {
             await pool.query(
-                'UPDATE booking_preferences SET attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
-                [booking.id]
+                'UPDATE booking_preferences SET status = ?, attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
+                ['pending', booking.id]
             );
 
             await logBookingAttempt(booking.id, 'manual_trigger', 'failed',
@@ -672,6 +700,17 @@ app.post('/api/bookings/:id/trigger', authenticateToken, async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error('Manual trigger error:', error);
+        
+        // Reset status back to pending on error
+        try {
+            await pool.query(
+                'UPDATE booking_preferences SET status = ?, attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
+                ['pending', req.params.id]
+            );
+        } catch (resetError) {
+            console.error('Failed to reset booking status:', resetError);
+        }
+        
         res.status(500).json({
             error: error.message,
             stack: error.stack
@@ -840,6 +879,51 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// TEST ENDPOINT: Force weekend booking for any date (bypasses time restrictions)
+app.post('/api/test/weekend-booking', authenticateToken, async (req, res) => {
+    try {
+        const { date } = req.body;
+        
+        if (!date) {
+            return res.status(400).json({ error: 'Date is required (format: YYYY-MM-DD)' });
+        }
+        
+        console.log(`🧪 TEST MODE: Forcing weekend booking for ${date}`);
+        
+        // Convert date string to Date object
+        const targetDate = new Date(date + 'T12:00:00');
+        
+        if (isNaN(targetDate.getTime())) {
+            return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+        }
+        
+        // Force execute weekend booking (bypassing all time/day restrictions)
+        const result = await weekendAutomation.executeWeekendBooking(targetDate, 'test-mode');
+        
+        if (result && result.success) {
+            res.json({
+                success: true,
+                message: `Test booking successful for ${date}`,
+                bookedTime: result.slot?.time,
+                actualDate: result.slot?.actualDate,
+                result: result
+            });
+        } else {
+            res.json({
+                success: false,
+                message: result?.message || result?.error || 'Test booking failed',
+                details: result
+            });
+        }
+    } catch (error) {
+        console.error('Test weekend booking error:', error);
+        res.status(500).json({ 
+            error: 'Test booking failed',
+            message: error.message 
+        });
+    }
+});
+
 
 
 // Add this new endpoint to server.js after the existing weekend endpoints (around line 250)
@@ -947,6 +1031,18 @@ cron.schedule('* * * * *', async () => {
             }
 
             for (const booking of pendingBookings) {
+                // Lock this booking to prevent race conditions with manual triggers
+                const [lockResult] = await pool.query(
+                    'UPDATE booking_preferences SET status = ?, last_attempt = NOW() WHERE id = ? AND status = ?',
+                    ['processing', booking.id, 'pending']
+                );
+                
+                // Skip if we couldn't get the lock (another process grabbed it)
+                if (lockResult.affectedRows === 0) {
+                    console.log(`⚠️  Booking ${booking.id} is already being processed, skipping`);
+                    continue;
+                }
+                
                 const opensAt = new Date(booking.booking_opens_at);
                 const timeUntilOpen = opensAt - now;
 
@@ -972,8 +1068,8 @@ cron.schedule('* * * * *', async () => {
                             console.log(`✅ Successfully booked ${booking.date} at ${result.slot?.time}`);
                         } else {
                             await pool.query(
-                                'UPDATE booking_preferences SET attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
-                                [booking.id]
+                                'UPDATE booking_preferences SET status = ?, attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
+                                ['pending', booking.id]
                             );
 
                             await logBookingAttempt(booking.id, 'auto_attempt', 'failed',
@@ -1002,8 +1098,8 @@ cron.schedule('* * * * *', async () => {
                         console.log(`✅ Successfully booked ${booking.date} at ${result.slot?.time}`);
                     } else {
                         await pool.query(
-                            'UPDATE booking_preferences SET attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
-                            [booking.id]
+                            'UPDATE booking_preferences SET status = ?, attempts = attempts + 1, last_attempt = NOW() WHERE id = ?',
+                            ['pending', booking.id]
                         );
 
                         await logBookingAttempt(booking.id, 'auto_attempt', 'failed',
@@ -1016,6 +1112,16 @@ cron.schedule('* * * * *', async () => {
         }
     } catch (error) {
         console.error('❌ Manual booking cron error:', error);
+        
+        // Reset any processing bookings back to pending on error
+        try {
+            await pool.query(
+                'UPDATE booking_preferences SET status = ? WHERE status = ? AND booking_type = ?',
+                ['pending', 'processing', 'manual']
+            );
+        } catch (resetError) {
+            console.error('Failed to reset processing bookings:', resetError);
+        }
     }
 });
 

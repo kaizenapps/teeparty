@@ -709,16 +709,64 @@ class GolfBookingService {
             const expectedDateString = `${expectedDayName}, ${expectedMonthName} ${expectedDateNum}`;
             console.log(`🔍 DEBUG: Looking for confirmation with date: "${expectedDateString}" and time: "${slot.time}"`);
 
-            if (responseText.includes('RESERVATION CONFIRMATION') && responseText.includes(expectedDateString) && responseText.includes(slot.time)) {
-                console.log(`✅ Booking confirmed! Requested: ${slot.time}, Date: ${expectedDateString}`);
+            // More robust success detection - check for RESERVATION CONFIRMATION and verify the date/time match what we requested
+            if (responseText.includes('RESERVATION CONFIRMATION')) {
+                console.log(`🔍 Found RESERVATION CONFIRMATION in response`);
+                
+                // Extract the actual booking details from the confirmation
+                // Updated patterns to match real golf site HTML structure
+                const dateMatch = responseText.match(/<td[^>]*>.*?Date.*?<\/td>\s*<td[^>]*>.*?<strong[^>]*>([^<]+)<\/strong>/i) || 
+                                responseText.match(/Date.*?<td[^>]*>.*?([A-Za-z]+,\s*[A-Za-z]+\s+\d+,\s*\d{4})/i);
+                const timeMatch = responseText.match(/<td[^>]*>.*?Time\(s\).*?<\/td>\s*<td[^>]*>.*?<strong[^>]*>([^<]+)<\/strong>/i) || 
+                                responseText.match(/Time\(s\).*?<td[^>]*>.*?(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+                
+                const actualDate = dateMatch ? dateMatch[1].trim() : 'Unknown';
+                const actualTime = timeMatch ? timeMatch[1].trim() : 'Unknown';
+                
+                console.log(`🔍 Confirmation details: Date="${actualDate}", Time="${actualTime}"`);
+                console.log(`🔍 Expected: Date="${expectedDateString}", Time="${slot.time}"`);
+                
+                // Check if both date and time match what we requested
+                const dateMatches = actualDate.includes(expectedDateString) || expectedDateString.includes(actualDate.replace(/,.*$/, ''));
+                const timeMatches = actualTime === slot.time;
+                
+                if (dateMatches && timeMatches) {
+                    console.log(`✅ Booking confirmed! Requested: ${slot.time}, Actual: ${actualTime}, Date: ${actualDate}`);
+                    return {
+                        success: true,
+                        message: 'Booking confirmed!',
+                        slot: {
+                            ...slot,
+                            requestedTime: slot.time,
+                            actualTime: actualTime,
+                            actualDate: actualDate
+                        },
+                        response: responseText.substring(0, 500)
+                    };
+                } else {
+                    console.log(`⚠️ Confirmation found but details don't match our request`);
+                    console.log(`Date match: ${dateMatches}, Time match: ${timeMatches}`);
+                    // This might be a confirmation for a different booking, continue trying
+                }
+            } else if (responseText.includes('There is not another available reservation at this timeslot')) {
                 return {
-                    success: true,
-                    message: 'Booking confirmed!',
-                    slot: {
-                        ...slot,
-                        requestedTime: slot.time,
-                        actualTime: actualBookedTime
-                    },
+                    success: false,
+                    message: 'Slot no longer available - booked by someone else',
+                    error: 'SLOT_UNAVAILABLE',
+                    response: responseText.substring(0, 500)
+                };
+            } else if (responseText.includes('did not fulfill the Weekday Booking restriction')) {
+                return {
+                    success: false,
+                    message: 'Weekday booking restriction for this player',
+                    error: 'WEEKDAY_RESTRICTION', 
+                    response: responseText.substring(0, 500)
+                };
+            } else if (responseText.includes('Rule Conflict')) {
+                return {
+                    success: false,
+                    message: 'Booking rule conflict - check restrictions',
+                    error: 'RULE_CONFLICT',
                     response: responseText.substring(0, 500)
                 };
             } else if (responseText.includes('error') || responseText.includes('failed')) {
@@ -734,6 +782,7 @@ class GolfBookingService {
                     response: responseText.substring(0, 500)
                 };
             }
+            
             } catch (error) {
                 console.error(`❌ [Attempt ${attempt}/${maxRetries}] Reservation error:`, error.message);
                 
