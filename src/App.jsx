@@ -440,13 +440,13 @@ const App = () => {
 
     const formatDateTime = (dateStr) => {
         if (!dateStr) return 'N/A';
-        // Backend stores times in Eastern already, so just format without timezone conversion
         return new Date(dateStr).toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
-            hour12: true
+            hour12: true,
+            timeZone: 'America/New_York'  // Convert to Eastern time
         });
     };
 
