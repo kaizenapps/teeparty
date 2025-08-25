@@ -440,9 +440,27 @@ const App = () => {
 
     const formatDateTime = (dateStr) => {
         if (!dateStr) return 'N/A';
-        // Database stores UTC timestamps, so append 'Z' to indicate UTC
-        const utcDateStr = dateStr.includes('Z') ? dateStr : dateStr + 'Z';
-        return new Date(utcDateStr).toLocaleString('en-US', {
+        
+        let date;
+        try {
+            // Try to parse the date string directly first
+            date = new Date(dateStr);
+            
+            // If it's an invalid date, try appending 'Z' for UTC
+            if (isNaN(date.getTime())) {
+                date = new Date(dateStr + 'Z');
+            }
+            
+            // If still invalid, return error
+            if (isNaN(date.getTime())) {
+                return 'Invalid Date';
+            }
+            
+        } catch (error) {
+            return 'Invalid Date';
+        }
+        
+        return date.toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
