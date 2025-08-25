@@ -1,285 +1,197 @@
 # Golf Tee Time Booking Automation
 
-Automated golf booking system for Trump National Golf Club Colts Neck with intelligent priority scheduling, weekend automation, and manual booking capabilities.
+Automated golf booking system for Trump National Golf Club Colts Neck with smart priority scheduling and weekend automation.
 
-## 🎯 Core Features
+## 🎯 Features
 
 ### Smart Priority Scheduling
-- **High Priority Booking**: Automatic detection of booking windows opening within 60 seconds
-- **Bypasses Cooldowns**: Critical booking attempts ignore 5-minute retry restrictions
-- **Precise Timing**: Ensures no missed booking opportunities at 6:30 AM opening times
-- **Dual-Tier Logic**: Normal 5-minute cooldowns for regular attempts, immediate processing for opening windows
+- **High Priority**: Bookings opening within 60 seconds bypass cooldowns
+- **Normal Priority**: Open booking windows retry every minute  
+- **No Wasted Attempts**: Only processes bookings at appropriate times
 
-### Weekend Auto-Booking System
-- **Automatic Weekend Detection**: Books Saturday and Sunday tee times 7 days in advance
-- **Catch-Up Intelligence**: Runs every 30 minutes to find missed weekend opportunities
-- **Smart Slot Selection**: Priority booking logic with 4→3→2→1 person fallback strategy
-- **Opening Time Calculation**: Automatically calculates Monday 6:30 AM Eastern booking windows
+### Weekend Auto-Booking
+- **Automatic**: Books Saturday and Sunday slots 7 days in advance at 6:30 AM Eastern
+- **Catch-Up Mode**: Runs every 30 minutes to find missed opportunities
+- **Fallback Logic**: 4→3→2→1 person slot priority with intelligent selection
 
 ### Manual Booking Management
-- **Custom Date Scheduling**: Queue bookings for any specific date with flexible time ranges
-- **Automated Processing**: System handles booking attempts when windows open
-- **Race Condition Protection**: Database locks prevent duplicate booking attempts
-- **Status Tracking**: Complete booking lifecycle from pending→processing→booked/failed
+- **Custom Scheduling**: Queue bookings for any date with flexible time ranges
+- **Race Condition Protection**: Database locks prevent duplicate attempts
+- **Success Detection**: Regex pattern matching for booking confirmation
 
-### Advanced Booking Logic
-- **Success Detection**: Regex pattern matching for booking confirmation validation
-- **Session Management**: Persistent authentication with encrypted credentials and cookie handling
-- **Network Resilience**: 10-attempt retry mechanism with exponential backoff
-- **HTML Parsing**: Cheerio-based tee sheet extraction with date validation
+### Technical Features
+- **RC4 Encryption**: Golf club credential security
+- **Session Management**: Persistent authentication with cookie handling
+- **Network Resilience**: 10-attempt retry with exponential backoff
+- **Timezone Aware**: All operations in Eastern Time (EDT/EST)
 
-## 🏗️ Technology Stack
-
-### Backend Infrastructure
-- **Node.js** with Express framework
-- **MySQL 8.0** with timezone-aware date handling
-- **Docker Compose** for containerized deployment
-- **Node-cron** for precise scheduling automation
-
-### Core Services
-- **bookingService.js**: RC4 encryption, authentication, tee sheet parsing, reservation processing
-- **weekendAutomation.js**: Weekend detection, catch-up logic, automated booking execution
-- **server.js**: API endpoints, cron scheduling, database management, race condition handling
-
-### Security & Authentication
-- **RC4 Encryption**: Golf club credential encryption for secure authentication
-- **JWT Tokens**: API authentication and session management
-- **Database Locks**: Atomic operations preventing concurrent booking conflicts
-
-## 🚀 Installation & Setup
-
-### Prerequisites
-```bash
-# Required
-Docker & Docker Compose
-Node.js 18+
-
-# Optional (for development)
-MySQL client for database access
-```
+## 🚀 Deployment
 
 ### Quick Start
 ```bash
-# 1. Clone repository
+# 1. Clone and setup environment
 git clone <repository-url>
 cd tee
+cp .env.example .env  # Edit with your settings
 
-# 2. Environment setup
-cat > .env << EOF
+# 2. Deploy with Docker
+docker-compose up -d
+
+# 3. Access application
+open http://localhost:3001
+```
+
+### Environment Variables
+```env
+# Database
 DB_HOST=mysql
 DB_USER=root
 DB_PASSWORD=root123
 DB_NAME=tee_booking
-JWT_SECRET=your-secure-jwt-secret
+
+# Application  
+PORT=3001
 NODE_ENV=production
-EOF
+TZ=America/New_York
 
-# 3. Deploy with Docker
-docker-compose up -d
-
-# 4. Access application
-# API: http://localhost:3001
-# Frontend: http://localhost:3000 (if available)
+# Golf Site (optional)
+GOLF_SITE_URL=https://www.trumpcoltsneck.com
+COURSE_ID=95
 ```
 
-### Database Schema Setup
-The system auto-creates required tables:
+### Database Setup
 ```sql
--- Add 'processing' to booking status enum
+-- Add processing status to enum (run once)
 ALTER TABLE booking_preferences 
 MODIFY status ENUM('pending','scheduled','booked','failed','processing');
 ```
 
-## ⚙️ Configuration
+## 📊 Logs & Monitoring
 
-### User Credentials Setup
-Configure golf club authentication via API:
+### Real-time Logs
 ```bash
-POST /api/settings
-{
-  "username": "your_username",
-  "password": "encrypted_password",
-  "preferred_time": "07:54:00",
-  "max_time": "13:00:00"
-}
-```
-
-### Weekend Automation Control
-```bash
-POST /api/weekend-settings
-{
-  "enabled": true
-}
-```
-
-### Guest List Management
-```bash
-POST /api/guests
-{
-  "name": "Guest Name",
-  "type": "guest",
-  "is_active": true
-}
-```
-
-## 🎮 Usage Patterns
-
-### Manual Booking Creation
-```bash
-POST /api/bookings
-{
-  "date": "2025-09-15",
-  "preferredTime": "08:00:00", 
-  "maxTime": "14:00:00"
-}
-```
-
-### Booking Status Monitoring
-```bash
-GET /api/bookings
-# Returns all bookings with status, attempts, and timing info
-```
-
-### Manual Trigger (Testing)
-```bash
-POST /api/bookings/:id/trigger
-# Forces immediate booking attempt
-```
-
-## 📊 System Architecture
-
-### Priority Scheduling Logic
-```sql
--- High Priority: Opening within 60 seconds (ignores cooldown)
-(booking_opens_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 1 MINUTE))
-OR
--- Normal Priority: Regular 5-minute cooldown
-(last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
-```
-
-### Cron Job Architecture
-```javascript
-// Manual booking checker - every minute
-cron.schedule('* * * * *', manualBookingProcessor);
-
-// Weekend automation - every 30 minutes  
-cron.schedule('*/30 * * * *', weekendCatchUpProcessor);
-```
-
-### Booking State Machine
-```
-pending → processing → booked (success)
-       ↘            ↘ pending (retry)
-                     ↘ failed (terminal)
-```
-
-## 🔧 Database Schema
-
-### Core Tables
-- **booking_preferences**: Manual booking queue with timing and status
-- **weekend_auto_settings**: Weekend automation configuration
-- **user_settings**: Encrypted credentials and booking preferences  
-- **guest_list**: Authorized booking guests
-- **booking_attempts**: Comprehensive booking attempt logging
-
-### Key Fields
-```sql
--- booking_preferences
-booking_opens_at DATETIME    -- Calculated opening time (date - 7 days at 6:30 AM)
-status ENUM                  -- pending|processing|booked|failed
-booking_type VARCHAR         -- 'manual'|'weekend_auto'
-last_attempt DATETIME        -- Used for cooldown calculations
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues & Solutions
-
-**Missed Booking Windows**
-- Check logs for "HIGH PRIORITY" messages at opening times
-- Verify `booking_opens_at` calculations are correct
-- Ensure no processing status locks are stuck
-
-**Authentication Failures**
-```bash
-# Check credential encryption
-docker logs app-1 | grep "authentication"
-
-# Verify golf club site accessibility
-docker exec app-1 curl -I https://trumpnationalcolts.foretees.com
-```
-
-**Race Condition Detection**
-```bash
-# Look for concurrent processing attempts
-docker logs app-1 | grep "already being processed"
-```
-
-**Database Status Issues**
-```sql
--- Check stuck bookings
-SELECT id, status, last_attempt, booking_opens_at 
-FROM booking_preferences 
-WHERE status = 'processing' AND last_attempt < DATE_SUB(NOW(), INTERVAL 10 MINUTE);
-
--- Reset stuck bookings
-UPDATE booking_preferences SET status = 'pending' WHERE status = 'processing';
-```
-
-### Monitoring Commands
-```bash
-# Real-time logs
+# View live application logs
 docker logs -f app-1
 
-# Database access
-docker exec -it mysql-container mysql -u root -proot123 tee_booking
-
-# Container status
-docker-compose ps
+# Specific log filtering
+docker logs app-1 | grep "HIGH PRIORITY"
+docker logs app-1 | grep "SUCCESS"
 ```
 
-## 🔍 API Reference
+### Key Log Messages
+```bash
+🚨 HIGH PRIORITY booking X - opens in Ys    # Priority scheduling active
+🔄 NORMAL PRIORITY booking X - window open   # Regular retry mode
+✅ Successfully booked DATE at TIME         # Booking success
+❌ Failed to book DATE: REASON              # Booking failure
+⚠️ Booking X already being processed       # Race condition prevented
+```
 
-### Booking Management
-- `GET /api/bookings` - List all bookings with status
-- `POST /api/bookings` - Create manual booking
-- `POST /api/bookings/:id/trigger` - Force booking attempt
-- `DELETE /api/bookings/:id` - Cancel booking
+### Application Status
+```bash
+# Check container health
+docker-compose ps
 
-### System Configuration  
-- `GET/POST /api/settings` - User credentials and preferences
-- `GET/POST /api/weekend-settings` - Weekend automation control
-- `GET/POST /api/guests` - Guest list management
+# View system health
+curl http://localhost:3001/api/health
 
-### Monitoring & Debug
-- `GET /api/view/teesheet` - View last tee sheet HTML
-- `GET /api/view/booking-response` - View last booking response
-- `GET /api/test/weekend-booking` - Test weekend automation
+# Monitor booking attempts
+curl http://localhost:3001/api/bookings
+```
 
-## 📈 Performance & Optimization
+## 💾 Database Export/Import
 
-### High-Frequency Operations
-- Cron jobs run every minute for manual bookings
-- Database queries optimized with proper indexing
-- Connection pooling for MySQL performance
-- Atomic operations for race condition prevention
+### Export Database
+```bash
+# Full database backup
+docker exec mysql-container mysqldump -u root -proot123 tee_booking > backup.sql
 
-### Resource Management
-- Docker container resource limits
-- MySQL query optimization
-- Session cookie management
-- Memory-efficient HTML parsing
+# Specific tables only
+docker exec mysql-container mysqldump -u root -proot123 tee_booking \
+  booking_preferences user_settings guest_list > essential_backup.sql
 
-## 🔒 Security Considerations
+# Timestamped backup
+docker exec mysql-container mysqldump -u root -proot123 tee_booking \
+  > "backup_$(date +%Y%m%d_%H%M%S).sql"
+```
 
-- RC4 encrypted credential storage
-- JWT token expiration management
-- SQL injection prevention with parameterized queries
-- Rate limiting through cooldown mechanisms
-- Secure Docker container configuration
+### Import Database
+```bash
+# Restore full database
+docker exec -i mysql-container mysql -u root -proot123 tee_booking < backup.sql
+
+# Import specific backup
+cat backup_20250825_063000.sql | docker exec -i mysql-container mysql -u root -proot123 tee_booking
+
+# Verify import
+docker exec mysql-container mysql -u root -proot123 -e "SELECT COUNT(*) FROM tee_booking.booking_preferences;"
+```
+
+### Database Access
+```bash
+# Direct MySQL access
+docker exec -it mysql-container mysql -u root -proot123 tee_booking
+
+# Common queries
+SELECT * FROM booking_preferences WHERE status = 'pending';
+SELECT * FROM booking_attempts ORDER BY created_at DESC LIMIT 10;
+SELECT * FROM weekend_auto_settings;
+```
+
+### Data Migration
+```bash
+# Export settings only
+docker exec mysql-container mysqldump -u root -proot123 tee_booking \
+  user_settings weekend_auto_settings guest_list > settings_only.sql
+
+# Export booking history  
+docker exec mysql-container mysqldump -u root -proot123 tee_booking \
+  booking_attempts weekend_booking_history > history_only.sql
+```
+
+## ⚙️ Configuration
+
+### Credentials Setup
+1. Access http://localhost:3001
+2. Go to **Settings** tab
+3. Enter golf club username/password
+4. Click "Update & Verify Credentials"
+
+### Weekend Automation
+1. Go to **Weekend Auto-Booking** tab
+2. Toggle "Enable" to activate
+3. System runs immediate catch-up check
+4. Monitors every 30 minutes thereafter
+
+## 🔧 Maintenance
+
+### Container Management
+```bash
+# Restart application
+docker-compose restart app
+
+# Update application
+docker-compose pull
+docker-compose up -d --build
+
+# Clean restart
+docker-compose down
+docker-compose up -d
+```
+
+### Database Maintenance
+```bash
+# Reset stuck bookings
+docker exec mysql-container mysql -u root -proot123 -e \
+  "UPDATE tee_booking.booking_preferences SET status='pending' WHERE status='processing';"
+
+# Clean old logs (keep last 1000)
+docker exec mysql-container mysql -u root -proot123 -e \
+  "DELETE FROM tee_booking.booking_attempts WHERE id NOT IN (SELECT id FROM (SELECT id FROM tee_booking.booking_attempts ORDER BY created_at DESC LIMIT 1000) as t);"
+```
 
 ---
 
-**Status**: Production Ready ✅
-**Last Updated**: August 2025
-**Booking Success Rate**: 99%+ with priority scheduling
+**Status**: Production Ready ✅  
+**Last Updated**: August 2025  
+**Timezone**: Eastern Time (EDT/EST)

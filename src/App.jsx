@@ -318,7 +318,7 @@ const App = () => {
             const data = await response.json();
 
             if (data.success) {
-                setMessage(`✅ Booking scheduled! Opens at: ${new Date(data.opensAt).toLocaleString()}`);
+                setMessage(`✅ Booking scheduled! Opens at: ${formatDateTime(data.opensAt)}`);
                 setNewBooking({ date: '', preferredTime: '07:54', maxTime: '13:00' });
                 fetchBookings();
             }
@@ -624,11 +624,11 @@ const App = () => {
                                                                 Preferred: {booking.preferred_time} | Max: {booking.max_time}
                                                             </p>
                                                             <p className="text-xs text-gray-500">
-                                                                Opens: {new Date(booking.booking_opens_at).toLocaleString()}
+                                                                Opens: {formatDateTime(booking.booking_opens_at)}
                                                             </p>
                                                             {booking.attempts > 0 && (
                                                                 <p className="text-xs text-gray-500">
-                                                                    Attempts: {booking.attempts} | Last: {new Date(booking.last_attempt).toLocaleString()}
+                                                                    Attempts: {booking.attempts} | Last: {formatDateTime(booking.last_attempt)}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -669,7 +669,7 @@ const App = () => {
                                                                         {log.status === 'success' ? '✓' : '✗'}
                                                                     </span>
                                                                     {' '}
-                                                                    {new Date(log.created_at).toLocaleString()} - {log.action}: {log.message}
+                                                                    {formatDateTime(log.created_at)} - {log.action}: {log.message}
                                                                 </div>
                                                             ))}
                                                         </div>

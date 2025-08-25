@@ -1011,7 +1011,8 @@ cron.schedule('* * * * *', async () => {
 
         // Find ALL pending MANUAL bookings with priority scheduling:
         // HIGH PRIORITY: Bookings opening within 1 minute (ignore cooldown)
-        // NORMAL PRIORITY: Regular 5-minute cooldown for other bookings
+        // NORMAL PRIORITY: Bookings already open (no cooldown - keep trying every minute)
+        // NO ATTEMPTS: Bookings not opening soon and not yet open
         const [pendingBookings] = await pool.query(
             `SELECT * FROM booking_preferences
              WHERE status = 'pending'
@@ -1021,8 +1022,8 @@ cron.schedule('* * * * *', async () => {
                    -- HIGH PRIORITY: Opening within next 60 seconds (ignore cooldown)
                    (booking_opens_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 1 MINUTE))
                    OR
-                   -- NORMAL PRIORITY: Regular 5-minute cooldown
-                   (last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+                   -- NORMAL PRIORITY: Already open (no cooldown - try every minute until success)
+                   (booking_opens_at <= NOW())
                )`
         );
 
@@ -1054,10 +1055,14 @@ cron.schedule('* * * * *', async () => {
                 const opensAt = new Date(booking.booking_opens_at);
                 const timeUntilOpen = opensAt - now;
                 
-                // Check if this is a high priority booking (opening soon)
+                // Check if this is a high priority booking (opening soon) or normal priority (already open)
                 const isHighPriority = timeUntilOpen > 0 && timeUntilOpen <= 60000;
+                const isNormalPriority = timeUntilOpen <= 0;
+                
                 if (isHighPriority) {
                     console.log(`🚨 HIGH PRIORITY booking ${booking.id} - opens in ${Math.round(timeUntilOpen / 1000)}s`);
+                } else if (isNormalPriority) {
+                    console.log(`🔄 NORMAL PRIORITY booking ${booking.id} - window is open (opened ${Math.abs(Math.round(timeUntilOpen / 1000))}s ago)`);
                 }
 
                 // If booking opens in less than 30 seconds, wait for optimal timing
