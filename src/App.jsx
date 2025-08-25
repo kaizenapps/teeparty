@@ -706,8 +706,8 @@ const App = () => {
                                                                         try {
                                                                             const date = new Date(log.created_at);
                                                                             if (isNaN(date.getTime())) return 'Invalid';
-                                                                            // Assume database is UTC, subtract 4 hours for EDT
-                                                                            date.setHours(date.getHours() - 4);
+                                                                            // Force same calculation as "Last" field - subtract 7 more hours to match
+                                                                            date.setHours(date.getHours() - 11);
                                                                             return date.toLocaleString('en-US', {
                                                                                 month: 'short', day: 'numeric', hour: 'numeric', 
                                                                                 minute: '2-digit', hour12: true
