@@ -648,7 +648,7 @@ const App = () => {
                                                             </p>
                                                             {booking.attempts > 0 && (
                                                                 <p className="text-xs text-gray-500">
-                                                                    Attempts: {booking.attempts} | Last: {formatDateTime(booking.last_attempt)}
+                                                                    Attempts: {booking.attempts} | Last: {new Date(booking.last_attempt).toLocaleString()}
                                                                 </p>
                                                             )}
                                                         </div>
