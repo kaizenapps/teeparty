@@ -1009,13 +1009,21 @@ cron.schedule('* * * * *', async () => {
         const now = new Date();
         console.log(`🔄 Cron check at ${now.toLocaleTimeString()}`);
 
-        // Find ALL pending MANUAL bookings for dates that haven't passed yet
+        // Find ALL pending MANUAL bookings with priority scheduling:
+        // HIGH PRIORITY: Bookings opening within 1 minute (ignore cooldown)
+        // NORMAL PRIORITY: Regular 5-minute cooldown for other bookings
         const [pendingBookings] = await pool.query(
             `SELECT * FROM booking_preferences
              WHERE status = 'pending'
                AND booking_type = 'manual'
                AND date >= CURDATE()
-               AND (last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))`
+               AND (
+                   -- HIGH PRIORITY: Opening within next 60 seconds (ignore cooldown)
+                   (booking_opens_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 1 MINUTE))
+                   OR
+                   -- NORMAL PRIORITY: Regular 5-minute cooldown
+                   (last_attempt IS NULL OR last_attempt < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+               )`
         );
 
         console.log(`📊 Found ${pendingBookings.length} pending manual bookings to check`);
@@ -1045,6 +1053,12 @@ cron.schedule('* * * * *', async () => {
                 
                 const opensAt = new Date(booking.booking_opens_at);
                 const timeUntilOpen = opensAt - now;
+                
+                // Check if this is a high priority booking (opening soon)
+                const isHighPriority = timeUntilOpen > 0 && timeUntilOpen <= 60000;
+                if (isHighPriority) {
+                    console.log(`🚨 HIGH PRIORITY booking ${booking.id} - opens in ${Math.round(timeUntilOpen / 1000)}s`);
+                }
 
                 // If booking opens in less than 30 seconds, wait for optimal timing
                 if (timeUntilOpen > 0 && timeUntilOpen < 30000) {
