@@ -440,13 +440,15 @@ const App = () => {
 
     const formatDateTime = (dateStr) => {
         if (!dateStr) return 'N/A';
-        return new Date(dateStr).toLocaleString('en-US', {
+        // Database stores UTC timestamps, so append 'Z' to indicate UTC
+        const utcDateStr = dateStr.includes('Z') ? dateStr : dateStr + 'Z';
+        return new Date(utcDateStr).toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
             hour12: true,
-            timeZone: 'America/New_York'  // Convert to Eastern time
+            timeZone: 'America/New_York'
         });
     };
 
