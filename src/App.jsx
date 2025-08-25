@@ -440,13 +440,13 @@ const App = () => {
 
     const formatDateTime = (dateStr) => {
         if (!dateStr) return 'N/A';
+        // Backend stores times in Eastern already, so just format without timezone conversion
         return new Date(dateStr).toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
-            hour12: true,
-            timeZone: 'America/New_York'  // Force EDT/EST timezone
+            hour12: true
         });
     };
 
@@ -624,7 +624,7 @@ const App = () => {
                                                                 Preferred: {booking.preferred_time} | Max: {booking.max_time}
                                                             </p>
                                                             <p className="text-xs text-gray-500">
-                                                                Opens: {formatDateTime(booking.booking_opens_at)}
+                                                                Opens: {new Date(booking.booking_opens_at).toLocaleString()}
                                                             </p>
                                                             {booking.attempts > 0 && (
                                                                 <p className="text-xs text-gray-500">
