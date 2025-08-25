@@ -648,7 +648,10 @@ const App = () => {
                                                             </p>
                                                             {booking.attempts > 0 && (
                                                                 <p className="text-xs text-gray-500">
-                                                                    Attempts: {booking.attempts} | Last: {new Date(booking.last_attempt).toLocaleString()}
+                                                                    Attempts: {booking.attempts} | Last: {new Date(booking.last_attempt + 'Z').toLocaleString('en-US', {
+                                                                        month: 'short', day: 'numeric', hour: 'numeric', 
+                                                                        minute: '2-digit', hour12: true, timeZone: 'America/New_York'
+                                                                    })}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -689,7 +692,10 @@ const App = () => {
                                                                         {log.status === 'success' ? '✓' : '✗'}
                                                                     </span>
                                                                     {' '}
-                                                                    {formatDateTime(log.created_at)} - {log.action}: {log.message}
+                                                                    {new Date(log.created_at + 'Z').toLocaleString('en-US', {
+                                                                        month: 'short', day: 'numeric', hour: 'numeric', 
+                                                                        minute: '2-digit', hour12: true, timeZone: 'America/New_York'
+                                                                    })} - {log.action}: {log.message}
                                                                 </div>
                                                             ))}
                                                         </div>
