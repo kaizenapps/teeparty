@@ -648,10 +648,10 @@ const App = () => {
                                                             </p>
                                                             {booking.attempts > 0 && (
                                                                 <p className="text-xs text-gray-500">
-                                                                    Attempts: {booking.attempts} | Last: {new Date(booking.last_attempt + 'Z').toLocaleString('en-US', {
+                                                                    Attempts: {booking.attempts} | Last: {booking.last_attempt ? new Date(booking.last_attempt + 'Z').toLocaleString('en-US', {
                                                                         month: 'short', day: 'numeric', hour: 'numeric', 
                                                                         minute: '2-digit', hour12: true, timeZone: 'America/New_York'
-                                                                    })}
+                                                                    }) : 'N/A'}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -692,10 +692,10 @@ const App = () => {
                                                                         {log.status === 'success' ? '✓' : '✗'}
                                                                     </span>
                                                                     {' '}
-                                                                    {new Date(log.created_at + 'Z').toLocaleString('en-US', {
+                                                                    {log.created_at ? new Date(log.created_at + 'Z').toLocaleString('en-US', {
                                                                         month: 'short', day: 'numeric', hour: 'numeric', 
                                                                         minute: '2-digit', hour12: true, timeZone: 'America/New_York'
-                                                                    })} - {log.action}: {log.message}
+                                                                    }) : 'N/A'} - {log.action}: {log.message}
                                                                 </div>
                                                             ))}
                                                         </div>
