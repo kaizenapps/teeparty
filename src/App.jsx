@@ -704,13 +704,21 @@ const App = () => {
                                                                     {' '}
                                                                     {log.created_at ? (() => {
                                                                         try {
-                                                                            const date = new Date(log.created_at);
-                                                                            if (isNaN(date.getTime())) return 'Invalid';
-                                                                            // Assume database is UTC, subtract 4 hours for EDT
-                                                                            date.setHours(date.getHours() - 4);
+                                                                            // Parse as UTC by adding Z or using UTC methods
+                                                                            const dateStr = String(log.created_at).replace(' ', 'T') + 'Z';
+                                                                            const date = new Date(dateStr);
+                                                                            if (isNaN(date.getTime())) {
+                                                                                // Fallback: manual UTC parsing
+                                                                                const parts = String(log.created_at).split(/[-\s:]/);
+                                                                                const utcDate = new Date(Date.UTC(parts[0], parts[1]-1, parts[2], parts[3], parts[4], parts[5]));
+                                                                                return utcDate.toLocaleString('en-US', {
+                                                                                    month: 'short', day: 'numeric', hour: 'numeric', 
+                                                                                    minute: '2-digit', hour12: true, timeZone: 'America/New_York'
+                                                                                });
+                                                                            }
                                                                             return date.toLocaleString('en-US', {
                                                                                 month: 'short', day: 'numeric', hour: 'numeric', 
-                                                                                minute: '2-digit', hour12: true
+                                                                                minute: '2-digit', hour12: true, timeZone: 'America/New_York'
                                                                             });
                                                                         } catch (e) {
                                                                             return 'Error';
