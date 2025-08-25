@@ -648,10 +648,20 @@ const App = () => {
                                                             </p>
                                                             {booking.attempts > 0 && (
                                                                 <p className="text-xs text-gray-500">
-                                                                    Attempts: {booking.attempts} | Last: {booking.last_attempt ? new Date(booking.last_attempt.replace(' ', 'T') + 'Z').toLocaleString('en-US', {
-                                                                        month: 'short', day: 'numeric', hour: 'numeric', 
-                                                                        minute: '2-digit', hour12: true, timeZone: 'America/New_York'
-                                                                    }) : 'N/A'}
+                                                                    Attempts: {booking.attempts} | Last: {booking.last_attempt ? (() => {
+                                                                        try {
+                                                                            const date = new Date(booking.last_attempt);
+                                                                            if (isNaN(date.getTime())) return 'Invalid';
+                                                                            // Assume database is UTC, subtract 4 hours for EDT
+                                                                            date.setHours(date.getHours() - 4);
+                                                                            return date.toLocaleString('en-US', {
+                                                                                month: 'short', day: 'numeric', hour: 'numeric', 
+                                                                                minute: '2-digit', hour12: true
+                                                                            });
+                                                                        } catch (e) {
+                                                                            return 'Error';
+                                                                        }
+                                                                    })() : 'N/A'}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -692,10 +702,20 @@ const App = () => {
                                                                         {log.status === 'success' ? '✓' : '✗'}
                                                                     </span>
                                                                     {' '}
-                                                                    {log.created_at ? new Date(log.created_at.replace(' ', 'T') + 'Z').toLocaleString('en-US', {
-                                                                        month: 'short', day: 'numeric', hour: 'numeric', 
-                                                                        minute: '2-digit', hour12: true, timeZone: 'America/New_York'
-                                                                    }) : 'N/A'} - {log.action}: {log.message}
+                                                                    {log.created_at ? (() => {
+                                                                        try {
+                                                                            const date = new Date(log.created_at);
+                                                                            if (isNaN(date.getTime())) return 'Invalid';
+                                                                            // Assume database is UTC, subtract 4 hours for EDT
+                                                                            date.setHours(date.getHours() - 4);
+                                                                            return date.toLocaleString('en-US', {
+                                                                                month: 'short', day: 'numeric', hour: 'numeric', 
+                                                                                minute: '2-digit', hour12: true
+                                                                            });
+                                                                        } catch (e) {
+                                                                            return 'Error';
+                                                                        }
+                                                                    })() : 'N/A'} - {log.action}: {log.message}
                                                                 </div>
                                                             ))}
                                                         </div>
