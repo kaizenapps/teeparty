@@ -704,13 +704,13 @@ const App = () => {
                                                                     {' '}
                                                                     {log.created_at ? (() => {
                                                                         try {
-                                                                            const date = new Date(log.created_at);
-                                                                            if (isNaN(date.getTime())) return 'Invalid';
-                                                                            // Assume database is UTC, subtract 4 hours for EDT
-                                                                            date.setHours(date.getHours() - 4);
-                                                                            return date.toLocaleString('en-US', {
+                                                                            // Force UTC interpretation like the "Last" field
+                                                                            const utcTime = new Date(log.created_at + ' UTC');
+                                                                            if (isNaN(utcTime.getTime())) return 'Invalid';
+                                                                            
+                                                                            return utcTime.toLocaleString('en-US', {
                                                                                 month: 'short', day: 'numeric', hour: 'numeric', 
-                                                                                minute: '2-digit', hour12: true
+                                                                                minute: '2-digit', hour12: true, timeZone: 'America/New_York'
                                                                             });
                                                                         } catch (e) {
                                                                             return 'Error';
