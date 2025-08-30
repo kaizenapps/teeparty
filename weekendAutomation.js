@@ -250,8 +250,9 @@ class WeekendAutomation {
             const result = await this.bookingService.findAndBookBestSlot(
                 targetDate,
                 '07:50:00',
-                '13:00:00',
-                guests
+                '14:30:00',
+                guests,
+                true  // ⚡ FAST MODE ENABLED FOR WEEKEND BOOKING
             );
 
             if (result.success) {
@@ -270,7 +271,7 @@ class WeekendAutomation {
                         1,
                         targetDateStr,
                         '07:50:00',
-                        '13:00:00',
+                        '14:30:00',
                         opensAt,
                         'booked',
                         'weekend_auto',

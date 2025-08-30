@@ -441,7 +441,7 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
         // Store the processed date object (with proper timezone) instead of the raw string
         const [result] = await pool.query(
             'INSERT INTO booking_preferences (user_id, date, preferred_time, max_time, booking_opens_at, status, booking_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [1, bookingDate, preferredTime || '07:54:00', maxTime || '13:00:00', opensAt, 'pending', 'manual']
+            [1, bookingDate, preferredTime || '07:54:00', maxTime || '14:30:00', opensAt, 'pending', 'manual']
         );
 
         await logBookingAttempt(result.insertId, 'created', 'info', `Manual booking scheduled for ${date}`);

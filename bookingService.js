@@ -276,9 +276,7 @@ class GolfBookingService {
                     throw new Error('Session expired - got login page');
                 }
 
-                if (response.data.includes('LaunchReserver')) {
-                    console.log('✅ Got tee sheet page with slots!');
-                }
+                // Got tee sheet page (logging minimized for speed)
 
                 return this.parseTeeSheet(response.data);
                 
@@ -335,7 +333,7 @@ class GolfBookingService {
         // Parse available slots
         const slots = this.parseAvailableSlots(html);
 
-        console.log(`Found ${slots.length} available slots`);
+        // Slots found (logging reduced for speed)
 
         return {
             available: true,
@@ -349,7 +347,7 @@ class GolfBookingService {
         const slots = [];
         const $ = cheerio.load(html);
 
-        console.log('Parsing for available slots...');
+        // Parsing slots (minimal logging for speed)
 
         // Decode HTML entities if present
         const decodedHtml = html
@@ -386,7 +384,7 @@ class GolfBookingService {
                             canReserve: true
                         });
 
-                        console.log(`Found slot: ${time} with ${availableSpots} spots`);
+                        // Slot found (logging removed for speed)
                     }
                 }
             }
@@ -431,7 +429,6 @@ class GolfBookingService {
             });
         }
 
-        console.log(`Total slots found: ${slots.length}`);
         return slots;
     }
 
@@ -816,8 +813,40 @@ class GolfBookingService {
     }
 
     // Main function to find and book best available slot
-    async findAndBookBestSlot(date, preferredTime, maxTime, guests) {
+    async findAndBookBestSlot(date, preferredTime, maxTime, guests, fastMode = false) {
         try {
+            if (fastMode) {
+                // ⚡ SPEED MODE: Minimal logging, instant booking
+                const teeSheet = await this.getTeeSheet(date);
+                if (!teeSheet.success) {
+                    return { success: false, message: teeSheet.message || 'Could not get tee sheet' };
+                }
+
+                const preferredTimeMin = this.timeToMinutes(preferredTime);
+                const maxTimeMin = this.timeToMinutes(maxTime);
+
+                // Fast scan with proper priority: 4→3→2→1 spots
+                for (let priority = 4; priority >= 1; priority--) {
+                    for (const slot of teeSheet.slots) {
+                        if (!slot.canReserve || slot.availableSpots !== priority) continue;
+                        const slotMin = this.timeToMinutes(slot.time);
+                        const inRange = slotMin >= preferredTimeMin && slotMin <= maxTimeMin;
+                        
+                        if (inRange) {
+                            // BOOK IMMEDIATELY - first slot of highest available priority
+                            console.log(`⚡ FAST: Booking ${slot.time} (${slot.availableSpots}/4 spots, Priority ${priority})`);
+                            return await this.makeReservation(slot, guests);
+                        }
+                    }
+                }
+
+                return {
+                    success: false,
+                    message: `No available slots between ${preferredTime} and ${maxTime}`,
+                    totalAvailable: teeSheet.slots.length
+                };
+            }
+
             console.log(`Looking for slots on ${date} between ${preferredTime} and ${maxTime}`);
 
             // Get tee sheet

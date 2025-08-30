@@ -14,7 +14,7 @@ const App = () => {
     const [newBooking, setNewBooking] = useState({
         date: '',
         preferredTime: '07:54',
-        maxTime: '13:00'
+        maxTime: '14:30'
     });
     const [logs, setLogs] = useState({});
     const [loading, setLoading] = useState(false);
@@ -319,7 +319,7 @@ const App = () => {
 
             if (data.success) {
                 setMessage(`✅ Booking scheduled! Opens at: ${formatDateTime(data.opensAt)}`);
-                setNewBooking({ date: '', preferredTime: '07:54', maxTime: '13:00' });
+                setNewBooking({ date: '', preferredTime: '07:54', maxTime: '14:30' });
                 fetchBookings();
             }
         } catch (error) {
