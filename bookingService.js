@@ -818,7 +818,7 @@ class GolfBookingService {
             if (fastMode) {
                 // ⚡ SPEED MODE: Minimal logging, instant booking
                 const teeSheet = await this.getTeeSheet(date);
-                if (!teeSheet.success) {
+                if (!teeSheet.available) {
                     return { success: false, message: teeSheet.message || 'Could not get tee sheet' };
                 }
 

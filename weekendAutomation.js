@@ -244,7 +244,7 @@ class WeekendAutomation {
                 return null;
             }
 
-            console.log(`⛳ Attempting to book ${targetDayName} ${targetDateStr} between 7:50 AM - 1:00 PM`);
+            console.log(`⛳ Attempting to book ${targetDayName} ${targetDateStr} between 7:50 AM - 2:30 PM`);
 
             // Try to book with fixed weekend time range
             const result = await this.bookingService.findAndBookBestSlot(
@@ -294,8 +294,8 @@ class WeekendAutomation {
                 console.log(`❌ Failed to book ${targetDayName}: ${errorMsg}`);
 
                 if (errorMsg.includes('No available slots')) {
-                    console.log('😞 No slots available in preferred time range (7:50 AM - 1:00 PM)');
-                    await this.logWeekendAttempt(targetDate, 'no_slots', 'No slots in 7:50 AM - 1:00 PM range');
+                    console.log('😞 No slots available in preferred time range (7:50 AM - 2:30 PM)');
+                    await this.logWeekendAttempt(targetDate, 'no_slots', 'No slots in 7:50 AM - 2:30 PM range');
                 } else if (errorMsg.includes('not open') || errorMsg.includes('countdown')) {
                     console.log('⏰ Slots not open yet');
                     await this.logWeekendAttempt(targetDate, 'failed', 'Booking window not open yet');
